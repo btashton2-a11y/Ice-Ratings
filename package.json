@@ -1,0 +1,6 @@
+{
+  "name": "ice-ratings",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=20" }
+}
