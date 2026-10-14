@@ -33,14 +33,13 @@ The first time anyone opens the site, it builds the season comparison from every
 - Live games show a red **LIVE** tag and update every minute.
 - Use the arrows next to the date to browse earlier nights.
 - Tap a game to open it. Tap a player for the full breakdown of his rating.
-- Every game and date has its own link (for example `…vercel.app/#g2026020090`) you can share.
-- The sliders at the bottom change the rating scale and stat weights for you only. They're saved in your browser.
+- The site always opens on the current day's games, and moves to the new day on its own if it's left open overnight.
 
 ## Making changes
 
 To change something, edit the file on GitHub (open it, click the pencil icon, then **Commit changes**). Vercel redeploys automatically within a minute.
 
-- Default stat weights and rating scale: `public/engine.js` (`DEFAULTS` and `SCALE_DEFAULT`)
+- Stat weights and rating scale: `public/engine.js` (`DEFAULTS` and `SCALE_DEFAULT`). These are the same for every visitor.
 - Expected-goals model: `xgModel` in `public/engine.js`
 - Page layout and colors: `public/index.html` and `public/app.js`
 
