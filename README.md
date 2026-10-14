@@ -1,4 +1,4 @@
-	# Ice Ratings
+# Puck Ratings
 
 FotMob-style player ratings for every NHL game. Each player's game is scored from 23 stats (box score, shot-by-shot expected goals, and on-ice results from the NHL's shift charts), then graded against every game played at the same position this season.
 
