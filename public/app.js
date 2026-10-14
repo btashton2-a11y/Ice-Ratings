@@ -550,16 +550,139 @@ document.addEventListener("click", e => { if(!e.target.closest(".search")) close
 // ---------- Views ----------
 function setView(v, { push = true, id = null } = {}){
   view = v;
-  ["scores","player","about"].forEach(k => $("view-" + k).hidden = k !== v);
+  ["scores","player","about","standings","stats"].forEach(k => $("view-" + k).hidden = k !== v);
   document.querySelectorAll(".nav button").forEach(b => b.setAttribute("aria-current", b.dataset.view === v ? "page" : "false"));
   if(push) try { history.pushState({ view: v, id }, ""); } catch(e){}
   if(v === "about") renderAbout();
+  if(v === "standings") loadStandings();
+  if(v === "stats") loadStats();
 }
 window.addEventListener("popstate", e => {
   const s = e.state || { view: "scores" };
   if(s.view === "player" && s.id) openPlayer(s.id, { push:false });
   else { setView(s.view || "scores", { push:false }); if(SCHED && (s.view || "scores") === "scores") renderScores(); }
 });
+
+// ---------- Standings ----------
+let STAND = null, standTab = "division", standSort = null, standAt = 0;
+const STAND_COLS = [
+  ["gp","GP",-1], ["w","W",-1], ["l","L",1], ["otl","OTL",1], ["pts","PTS",-1], ["pct","P%",-1],
+  ["rw","RW",-1,"hide-sm"], ["gf","GF",-1,"hide-sm"], ["ga","GA",1,"hide-sm"], ["diff","DIFF",-1,"hide-sm"], ["l10","L10",0,"hide-md"], ["strk","STRK",0,"hide-md"]
+];
+const CLINCH = { x:"Clinched playoff spot", y:"Clinched division", z:"Clinched conference", p:"Won Presidents' Trophy", e:"Eliminated" };
+async function loadStandings(){
+  const host = $("view-standings");
+  if(STAND && Date.now() - standAt < 5*60*1000){ renderStandings(); return; }
+  if(!STAND) host.innerHTML = `<div class="card loading">Loading standings…</div>`;
+  try { STAND = await api("/api/standings"); standAt = Date.now(); renderStandings(); }
+  catch(e){ if(!STAND) host.innerHTML = `<div class="card empty-card">${esc(e.message)}</div>`; }
+}
+function standTable(rows, { title = "", seqKey = "leagueSeq", cut = 0, startRank = 1, sortable = true } = {}){
+  let list = [...rows].sort((a,b) => a[seqKey] - b[seqKey]);
+  if(sortable && standSort){ const c = STAND_COLS.find(c => c[0] === standSort.k); if(c && c[2]) list.sort((a,b) => (b[standSort.k] - a[standSort.k]) * (standSort.d) || a[seqKey] - b[seqKey]); }
+  const head = `<tr><th class="l rk">#</th><th class="l">${esc(title || "Team")}</th>${STAND_COLS.map(([k,l,dir,cls]) => `<th class="${cls || ""}">${dir && sortable ? `<button type="button" class="sort" data-ssort="${k}" aria-pressed="${standSort?.k === k}">${l}${standSort?.k === k ? (standSort.d > 0 ? " ↓" : " ↑") : ""}</button>` : l}</th>`).join("")}</tr>`;
+  const body = list.map((t,i) => `<tr class="${cut && i === cut - 1 ? "cut" : ""}"><td class="l rk">${startRank + i}</td>
+    <td class="l"><span class="tcell">${logo(t.ab)}<span class="tname"><span class="full">${esc(t.name)}</span><span class="abv">${esc(t.ab)}</span></span>${t.clinch ? `<span class="clinch" title="${esc(CLINCH[t.clinch] || "")}">${esc(t.clinch)}</span>` : ""}</span></td>
+    ${STAND_COLS.map(([k,,,cls]) => `<td class="${cls || ""}${k === "pts" ? " pts" : ""}">${k === "pct" ? t.pct.toFixed(3).replace(/^0/, "") : k === "diff" ? (t.diff > 0 ? "+" : "") + t.diff : esc(t[k])}</td>`).join("")}</tr>`).join("");
+  return `<div class="tbl-wrap"><table class="data stand"><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
+}
+function bracketSide(conf){
+  const T = STAND.teams.filter(t => t.conf === conf);
+  const divs = [...new Set(T.map(t => t.div))];
+  const top = d => T.filter(t => t.div === d).sort((a,b) => a.divSeq - b.divSeq);
+  const wc = T.filter(t => t.wcSeq > 0).sort((a,b) => a.wcSeq - b.wcSeq);
+  const [A, B] = divs.map(top);
+  if(!A || !B || A.length < 3 || B.length < 3 || wc.length < 2) return "";
+  const aBetter = A[0].confSeq < B[0].confSeq;
+  const side = (D, wcTeam, wcLbl, dn) => [[D[0], `${dn} 1`, wcTeam, wcLbl], [D[1], `${dn} 2`, D[2], `${dn} 3`]];
+  const ups = [...side(A, aBetter ? wc[1] : wc[0], aBetter ? "WC 2" : "WC 1", A[0].div), ...side(B, aBetter ? wc[0] : wc[1], aBetter ? "WC 1" : "WC 2", B[0].div)];
+  const line = (t, s) => `<div class="mu-team">${logo(t.ab)}<span class="seed">${esc(s)}</span><span class="nm">${esc(t.short || t.ab)}</span><b>${t.pts}</b></div>`;
+  return `<section class="bracket-conf"><h3>${esc(conf)} Conference</h3><div class="mu-grid">${ups.map(([a, sa, b, sb]) => `<div class="mu">${line(a, sa)}${line(b, sb)}</div>`).join("")}</div></section>`;
+}
+function renderStandings(){
+  const host = $("view-standings"), T = STAND.teams;
+  const tabs = [["division","Division"],["conference","Conference"],["league","League"],["playoffs","Playoffs"]];
+  const confs = [...new Set(T.map(t => t.conf))].sort();
+  let body = "";
+  if(standTab === "division"){
+    body = confs.map(c => [...new Set(T.filter(t => t.conf === c).map(t => t.div))].sort().map(d =>
+      `<section class="card stand-card"><h2>${esc(d)} <span class="muted">· ${esc(c)}</span></h2>${standTable(T.filter(t => t.div === d), { title: d, seqKey: "divSeq", cut: 3 })}</section>`).join("")).join("");
+    body = `<div class="stand-grid">${body}</div>`;
+  } else if(standTab === "conference"){
+    body = `<div class="stand-grid">${confs.map(c => `<section class="card stand-card"><h2>${esc(c)} Conference</h2>${standTable(T.filter(t => t.conf === c), { title: c, seqKey: "confSeq" })}</section>`).join("")}</div>`;
+  } else if(standTab === "league"){
+    body = `<section class="card stand-card"><h2>NHL</h2>${standTable(T, { seqKey: "leagueSeq" })}</section>`;
+  } else {
+    body = `<section class="card stand-card"><h2>If the playoffs started today</h2><p class="muted small">The top three in each division make it, plus two wild cards per conference. The better division winner plays the second wild card.</p><div class="bracket">${confs.map(bracketSide).join("")}</div></section>` +
+      `<div class="stand-grid">${confs.map(c => { const C = T.filter(t => t.conf === c), divs = [...new Set(C.map(t => t.div))].sort();
+        return `<section class="card stand-card"><h2>${esc(c)} wild card</h2>${divs.map(d => standTable(C.filter(t => t.div === d && t.wcSeq === 0), { title: d, seqKey: "divSeq", sortable: false })).join("")}${standTable(C.filter(t => t.wcSeq > 0), { title: "Wild card", seqKey: "wcSeq", cut: 2, sortable: false })}</section>`; }).join("")}</div>`;
+  }
+  const legend = T.some(t => t.clinch) ? `<p class="muted small legend">${Object.entries(CLINCH).filter(([k]) => T.some(t => t.clinch === k)).map(([k,v]) => `<b>${k}</b> ${v}`).join(" · ")}</p>` : "";
+  host.innerHTML = `<div class="page-head"><h1>Standings</h1><div class="seg" role="tablist">${tabs.map(([k,l]) => `<button type="button" role="tab" data-stab="${k}" aria-selected="${standTab === k}">${l}</button>`).join("")}</div></div>
+    ${body}${legend}<p class="muted small">P% is points percentage. RW is regulation wins, the first tiebreaker. Tap a column to sort. ${standTab === "division" ? "The line marks the top three, who qualify for the playoffs." : ""}</p>`;
+}
+
+// ---------- League stats ----------
+let LEAD = null, ADV = null, statsTab = "skaters", advPos = "all", statsAt = 0;
+const fmtToiPG = v => `${Math.floor(v/60)}:${String(Math.round(v%60)).padStart(2,"0")}`;
+const LEAD_CATS = {
+  skaters: [["points","Points"],["goals","Goals"],["assists","Assists"],["plusMinus","Plus/minus", v => (v > 0 ? "+" : "") + v],["goalsPp","Power-play goals"],["goalsSh","Shorthanded goals"],["toi","Ice time per game", fmtToiPG],["faceoffLeaders","Faceoff win %", v => (v*100).toFixed(1) + "%"],["penaltyMins","Penalty minutes"]],
+  goalies: [["wins","Wins"],["savePctg","Save %", v => v.toFixed(3).replace(/^0/, "")],["goalsAgainstAverage","Goals-against average", v => v.toFixed(2)],["shutouts","Shutouts"]]
+};
+async function loadStats(){
+  const host = $("view-stats");
+  const fresh = Date.now() - statsAt < 10*60*1000;
+  if(LEAD && fresh){ renderStats(); return; }
+  if(!LEAD) host.innerHTML = `<div class="card loading">Loading league stats…</div>`;
+  try { LEAD = await api("/api/leaders"); statsAt = Date.now(); renderStats(); }
+  catch(e){ if(!LEAD) host.innerHTML = `<div class="card empty-card">${esc(e.message)}</div>`; }
+  api("/api/season-stats").then(j => { ADV = j; if(view === "stats") renderStats(); }).catch(e => { ADV = { error: e.message }; if(view === "stats" && statsTab === "advanced") renderStats(); });
+}
+function leaderCard(title, rows, fmtV, note = ""){
+  if(!rows || !rows.length) return "";
+  return `<section class="card lcard"><h3>${esc(title)}</h3>${note ? `<p class="lnote">${note}</p>` : ""}<ol>${rows.map((p,i) => `<li class="${i ? "" : "first"}"><button type="button" data-player="${p.id}">
+    <span class="rk">${i+1}</span><span class="av ${i ? "sm" : "md"}"><span class="face" aria-hidden="true">${initials(p.name)}${mug(p.id)}</span></span>
+    <span class="who"><b>${esc(p.name)}</b><span>${logo(p.team)}${esc(p.team)}${p.pos ? ` · ${esc(p.pos)}` : ""}${p.sub ? ` · ${esc(p.sub)}` : ""}</span></span>
+    <span class="val">${fmtV ? fmtV(p.v) : esc(p.v)}</span></button></li>`).join("")}</ol></section>`;
+}
+function advCards(){
+  if(!ADV) return `<div class="card loading">Crunching every game this season…</div>`;
+  if(ADV.error) return `<div class="card empty-card">${esc(ADV.error)}</div>`;
+  const posOk = p => advPos === "all" || (advPos === "D" ? p.pos === "D" : p.pos !== "D");
+  const S = ADV.skaters.filter(posOk), G = ADV.goalies;
+  const maxGp = Math.max(1, ...ADV.skaters.map(p => p.gp)), q = Math.max(1, Math.ceil(maxGp * 0.4));
+  const gMax = Math.max(1, ...G.map(p => p.gp)), gq = Math.max(1, Math.ceil(gMax * 0.3));
+  const top = (arr, key, { min = () => true, asc = false, sub } = {}) => arr.filter(p => p[key] != null && min(p)).sort((a,b) => asc ? a[key] - b[key] : b[key] - a[key]).slice(0, 10).map(p => ({ ...p, v: p[key], sub: sub ? sub(p) : "" }));
+  const pct = v => (v*100).toFixed(1) + "%", sgn = v => (v > 0 ? "+" : "") + v.toFixed(2), d2 = v => v.toFixed(2), d1 = v => v.toFixed(1);
+  const qual = `Minimum ${q} game${q === 1 ? "" : "s"}.`;
+  const sk = [
+    ["Average Puck Rating", top(S, "rating", { min: p => p.rated >= q, sub: p => `${p.rated} GP` }), d2, `This site's 0–10 game rating, averaged. ${qual}`],
+    ["Expected goals", top(S, "ixg", { sub: p => `${p.g} G` }), d2, "Goals an average shooter would score from his shots, based on location, shot type, rebounds and rushes."],
+    ["Goals above expected", top(S, "gax", { sub: p => `${p.g} G on ${p.ixg.toFixed(1)} xG` }), sgn, "Goals minus expected goals (empty-net goals left out). Finishing talent, or a hot streak."],
+    ["5-on-5 expected goal share", top(S, "xgPct", { min: p => p.gp >= q && p.xgf5 + p.xga5 >= 1 }), pct, `Of the expected goals at 5-on-5 while he's on the ice, the share his team creates. 50% is even. ${qual}`],
+    ["5-on-5 shot attempt share", top(S, "cfPct", { min: p => p.gp >= q }), pct, `Corsi: share of all shot attempts at 5-on-5 while he's on the ice. A puck-possession measure. ${qual}`],
+    ["High-danger chances", top(S, "hd", {}), null, "Unblocked shots from the slot and crease, where most goals come from."],
+    ["Points per 60 minutes", top(S, "p60", { min: p => p.gp >= q && p.toi >= p.gp * 600, sub: p => `${p.p} P` }), d2, `Scoring rate by ice time, all situations. ${qual}, 10+ minutes a game.`],
+    ["Shot attempts", top(S, "icf", {}), null, "Every shot he tried: on goal, missed or blocked."]
+  ];
+  const go = [
+    ["Goals saved above expected", top(G, "gsax", { sub: p => `${p.gp} GP` }), sgn, "Expected goals against minus goals allowed. The best single measure of a goalie's work."],
+    ["High-danger save %", top(G, "hdsv", { min: p => p.gp >= gq, sub: p => `${p.hdf} faced` }), v => v.toFixed(3).replace(/^0/, ""), `Save % on chances from the slot and crease. Minimum ${gq} games.`],
+    ["Average Puck Rating (goalies)", top(G, "rating", { min: p => p.rated >= gq, sub: p => `${p.rated} GP` }), d2, `This site's game rating for goalies, averaged. Minimum ${gq} games.`]
+  ];
+  return `<div class="seg small-seg" role="group" aria-label="Position">${[["all","All skaters"],["F","Forwards"],["D","Defense"]].map(([k,l]) => `<button type="button" data-advpos="${k}" aria-pressed="${advPos === k}">${l}</button>`).join("")}</div>
+    <div class="lgrid">${sk.map(([t, r, f, n]) => leaderCard(t, r, f, n)).join("")}</div>
+    <h2 class="sec-h">Goalies</h2><div class="lgrid">${go.map(([t, r, f, n]) => leaderCard(t, r, f, n)).join("")}</div>
+    <p class="muted small">Advanced stats come from this site's own models, built from every shot and shift in ${ADV.games} games this season. They can differ from other sites that use different models.</p>`;
+}
+function renderStats(){
+  const host = $("view-stats");
+  const tabs = [["skaters","Skaters"],["goalies","Goalies"],["advanced","Advanced"]];
+  let body = "";
+  if(statsTab === "advanced") body = advCards();
+  else if(LEAD) body = `<div class="lgrid">${LEAD_CATS[statsTab].map(([k, t, f]) => leaderCard(t, LEAD[statsTab][k], f)).join("")}</div><p class="muted small">Official NHL leaders. Rate stats like save % and faceoff % use the NHL's minimums.</p>`;
+  host.innerHTML = `<div class="page-head"><h1>League stats</h1><div class="seg" role="tablist">${tabs.map(([k,l]) => `<button type="button" role="tab" data-sttab="${k}" aria-selected="${statsTab === k}">${l}</button>`).join("")}</div></div>${body}`;
+}
 
 // ---------- Loading ----------
 async function loadGames(ids){
@@ -634,6 +757,10 @@ document.addEventListener("click", e => {
   const ptab = t.closest("[data-ptab]"); if(ptab){ playerTab = ptab.dataset.ptab; renderPlayer(); return; }
   const gl = t.closest("[data-gamelink]"); if(gl){ openGameFromPlayer(+gl.dataset.gamelink, gl.dataset.date); return; }
   if(t.id === "see-prev"){ goDay(shiftDate(viewDate, -1)); return; }
+  const stb = t.closest("[data-stab]"); if(stb){ standTab = stb.dataset.stab; standSort = null; renderStandings(); return; }
+  const ss = t.closest("[data-ssort]"); if(ss){ const k = ss.dataset.ssort, c = STAND_COLS.find(c => c[0] === k); const d0 = c[2] < 0 ? 1 : -1; standSort = standSort?.k === k ? (standSort.d === d0 ? { k, d: -d0 } : null) : { k, d: d0 }; renderStandings(); return; }
+  const stt = t.closest("[data-sttab]"); if(stt){ statsTab = stt.dataset.sttab; renderStats(); return; }
+  const ap = t.closest("[data-advpos]"); if(ap){ advPos = ap.dataset.advpos; renderStats(); return; }
   const sh = t.closest(".shot"); if(sh) showTip(sh);
 });
 document.addEventListener("keydown", e => { if(e.key === "Enter"){ const gl = e.target.closest?.("[data-gamelink]"); if(gl) openGameFromPlayer(+gl.dataset.gamelink, gl.dataset.date); } });
