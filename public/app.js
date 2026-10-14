@@ -360,7 +360,9 @@ async function loadDay(date, { keepGame = false } = {}){
 }
 async function refresh(){
   try {
+    const wasToday = viewDate === SCHED.today;
     const s = await api(`/api/schedule?date=${viewDate}`);
+    if(wasToday && s.today !== viewDate){ goDay(s.today); return; }   // the day rolled over while the page was open
     SCHED = s;
     const need = s.games.filter(g => started(g.st) && (!GAMES.has(g.id) || !done(GAMES.get(g.id).st))).map(g => g.id);
     await loadGames(need);
@@ -377,8 +379,9 @@ function schedulePoll(){
   const recentDone = SCHED.games.some(g => done(g.st)) && viewDate >= shiftDate(SCHED.today, -1) && SCHED.games.some(g => !started(g.st) || live(g.st));
   if(anyLive || soon) pollTimer = setTimeout(refresh, 60*1000);
   else if(recentDone || viewDate >= SCHED.today) pollTimer = setTimeout(refresh, 5*60*1000);
+  else pollTimer = setTimeout(refresh, 15*60*1000);
 }
-function setHash(){ try { history.replaceState(null, "", current ? `#g${current}` : location.pathname); } catch(e){} }
+function setHash(){ try { if(location.hash) history.replaceState(null, "", location.pathname); } catch(e){} }
 
 // ---------- Events ----------
 function selectGame(id, playerId){
@@ -402,7 +405,7 @@ $("prev-day").addEventListener("click", () => goDay(shiftDate(viewDate, -1)));
 $("next-day").addEventListener("click", () => goDay(shiftDate(viewDate, 1)));
 $("today-btn").addEventListener("click", () => goDay(SCHED.today));
 document.addEventListener("click", e => { if(e.target.id === "see-prev") goDay(shiftDate(viewDate, -1)); });
-document.addEventListener("visibilitychange", () => { if(!document.hidden && SCHED && SCHED.games.some(g => live(g.st))) refresh(); });
+document.addEventListener("visibilitychange", () => { if(!document.hidden && SCHED && (viewDate === SCHED.today || SCHED.games.some(g => live(g.st)))) refresh(); });
 
 let raf = 0;
 const rerender = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => { const y = window.scrollY; renderAll(); window.scrollTo(0, y); }); };
@@ -415,16 +418,8 @@ function showError(e){ $("slate").innerHTML = `<div class="empty">${esc(e.messag
   api("/api/baseline").then(b => { BASE = b; if(SCHED) rerender(); else renderScale(); })
     .catch(e => { $("pool-counts").textContent = " (the season comparison couldn't load, so ratings are graded against the games on this page)"; });
   try {
-    const h = location.hash;
-    let m;
-    if((m = h.match(/^#g(\d{10})$/))){
-      const g = await api(`/api/game?id=${m[1]}`); GAMES.set(g.id, g); current = g.id;
-      await loadDay(g.d, { keepGame:true });
-    } else if((m = h.match(/^#d(\d{4}-\d{2}-\d{2})$/))){
-      await loadDay(m[1]);
-    } else {
-      const t = await api(`/api/schedule`);
-      await loadDay(t.date);
-    }
+    setHash();                                   // drop any old #game link so every visit starts fresh
+    const t = await api(`/api/schedule`);
+    await loadDay(t.date);
   } catch(e){ showError(e); }
 })();
