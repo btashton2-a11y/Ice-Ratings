@@ -237,7 +237,6 @@ details.goals summary:focus-visible{outline:2px solid var(--blue);outline-offset
 .legend i{width:14px;height:14px;border-radius:4px;display:inline-block}
 .notes{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px;display:flex;flex-direction:column;gap:5px;max-width:82ch}
 .notes b{color:var(--ink);font-weight:600}
-.custom-note{font-size:13px;color:var(--ink);background:var(--sunk);border-radius:8px;padding:8px 10px}
 footer{color:var(--muted);font-size:12.5px}
 
 @media (max-width:860px){ .analysis{grid-template-columns:minmax(0,1fr)} }
@@ -308,22 +307,6 @@ footer{color:var(--muted);font-size:12.5px}
       <span><i style="background:var(--r-good)"></i>7.0–7.9 strong</span>
       <span><i style="background:var(--r-mid)"></i>6.0–6.9 average</span>
       <span><i style="background:var(--r-low)"></i>Below 6.0 rough night</span>
-    </div>
-    <h3 class="label" style="font-size:13px">Rating scale</h3>
-    <p>These two sliders change how ratings are spread out. Rankings and percentiles stay the same; only the numbers move. A wider spread makes high ratings more common and low ratings lower.</p>
-    <div class="sl-groups">
-      <div class="sl-group"><div class="sl"><label for="s-center"><span>Typical rating (the median game)</span><span class="mono" id="sv-center"></span></label>
-        <input type="range" id="s-center" data-s="center" min="5.5" max="7.5" step="0.1"></div></div>
-      <div class="sl-group"><div class="sl"><label for="s-spread"><span>Spread (rating points per standard deviation)</span><span class="mono" id="sv-spread"></span></label>
-        <input type="range" id="s-spread" data-s="spread" min="0.6" max="1.6" step="0.05"></div></div>
-    </div>
-    <h3 class="label" style="font-size:13px">Tune the game score</h3>
-    <p>Drag a slider to change what a stat is worth. This changes who ranks where; it doesn't make high ratings more or less common.</p>
-    <div class="custom-note" id="custom-note" hidden>With custom weights, ratings are graded against the games on this page instead of the full season, since the season's game scores were computed with the default weights.</div>
-    <div class="sl-groups" id="sliders"></div>
-    <div class="panel-actions">
-      <button class="btn" id="reset" type="button">Reset scale and weights</button>
-      <span class="avg" id="tuned-note"></span>
     </div>
     <h3 class="label" style="font-size:13px">What the advanced stats mean</h3>
     <ul class="notes">

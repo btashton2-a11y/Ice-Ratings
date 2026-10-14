@@ -8,14 +8,6 @@ export const DEFAULTS = {
   penTaken:0.25, penDrawn:0.15, fo:0.02, toi:0.03,
   gsax:0.45, hdsv:0.03, shsv:0.02, win:0.3
 };
-export const SLIDER_GROUPS = [
-  ["Scoring", [["goal","Goal",0,2,.05],["enGoal","Empty-net goal",0,1,.05],["ixg","Expected goals created (per 1.0 xG)",0,2,.05],["a1","Primary assist",0,1.5,.05],["a2","Secondary assist",0,1,.05]]],
-  ["Shooting", [["sog","Shot on goal",0,.2,.01],["icf","Shot attempt (any)",0,.1,.005],["hd","High-danger chance",0,.3,.01]]],
-  ["On-ice at even strength", [["gd5","Goal differential (per goal)",0,.6,.05],["xgd5","Expected-goal differential (per 1.0 xG)",0,1.5,.05],["cfd5","Shot-attempt differential (per attempt)",0,.06,.005]]],
-  ["Physical and puck", [["hit","Hit",0,.15,.01],["block","Blocked shot",0,.3,.01],["take","Takeaway",0,.4,.01],["give","Giveaway (penalty)",0,.4,.01]]],
-  ["Discipline and draws", [["penTaken","Penalty taken",0,.8,.05],["penDrawn","Penalty drawn",0,.8,.05],["fo","Faceoff (per net win)",0,.1,.005],["toi","Ice time (per min vs. 15:00)",0,.1,.005]]],
-  ["Goalies", [["gsax","Goals saved above expected (per goal)",0,1.2,.05],["hdsv","High-danger save",0,.15,.01],["shsv","Save while shorthanded",0,.1,.01],["win","Win bonus",0,1,.05]]]
-];
 export const MIN_TOI_SK = 300, MIN_TOI_G_BASE = 1200;
 export const grpOf = pos => pos==="G" ? "G" : pos==="D" ? "D" : "F";
 export const fmtToi = s => `${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`;

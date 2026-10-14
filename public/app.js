@@ -2,10 +2,7 @@ import * as E from "./engine.js";
 
 // ---------- State ----------
 const $ = id => document.getElementById(id);
-const store = { get(k){ try { return JSON.parse(localStorage.getItem(k) || "null"); } catch(e){ return null; } },
-                set(k, v){ try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, JSON.stringify(v)); } catch(e){} } };
-let W = { ...E.DEFAULTS, ...(store.get("ice-w") || {}) };
-let SCALE = { ...E.SCALE_DEFAULT, ...(store.get("ice-scale") || {}) };
+const W = E.DEFAULTS, SCALE = E.SCALE_DEFAULT;   // fixed: everyone sees the same ratings
 let BASE = null;            // season calibration from /api/baseline
 let SCHED = null;           // { date, today, games } for the day being viewed
 const GAMES = new Map();    // game id -> game data from /api/game
@@ -18,7 +15,6 @@ const STARTED = ["LIVE", "CRIT", "OFF", "FINAL"];
 const started = st => STARTED.includes(st);
 const live = st => st === "LIVE" || st === "CRIT";
 const done = st => st === "OFF" || st === "FINAL";
-const isDefault = () => Object.keys(E.DEFAULTS).every(k => Math.abs(W[k] - E.DEFAULTS[k]) < 1e-9);
 
 async function api(path){
   const r = await fetch(path);
@@ -56,7 +52,7 @@ function dayGames(){ return (SCHED?.games || []).map(s => GAMES.get(s.id)).filte
 function rateAll(){
   const games = dayGames(), scored = {};
   games.forEach(g => { scored[g.id] = E.scoreGame(g, W); });
-  if(isDefault() && BASE && BASE.cal.F.n >= 50){ CALS = BASE.cal; calSource = "season"; }
+  if(BASE && BASE.cal.F.n >= 50){ CALS = BASE.cal; calSource = "season"; }
   else {
     const pools = { F:[], D:[], G:[] };
     const pool = games.filter(g => done(g.st)).length ? games.filter(g => done(g.st)) : games;
@@ -316,27 +312,17 @@ function showTip(el){
   tip.style.left = Math.max(0, left) + "px"; tip.style.top = Math.max(0, top) + "px";
 }
 
-// ---------- Scale + sliders ----------
+// ---------- Rating scale explainer ----------
 function renderScale(){
   const c = SCALE.center, s = SCALE.spread;
   $("scale-formula").textContent = `${c.toFixed(1)} + ${s.toFixed(2)} × z`;
-  $("sv-center").textContent = c.toFixed(1); $("sv-spread").textContent = s.toFixed(2);
-  $("s-center").value = c; $("s-spread").value = s;
   const pct = v => v >= 99.95 ? "99.9" : v >= 99 ? v.toFixed(1) : String(Math.round(v));
   const rows = [`<tr><td class="mono">${c.toFixed(1)}</td><td>Half of all games at his position</td><td>The typical game</td></tr>`];
   [7,8,9,10].forEach(r => { if(r <= c + 0.05) return; const z = (r - c)/s, share = 1 - E.normCdf(z);
     rows.push(`<tr><td class="mono">${r === 10 ? "10.0" : r.toFixed(1) + "+"}</td><td>${pct(E.normCdf(z)*100)}%</td><td>About 1 in ${Math.max(2, Math.round(1/share)).toLocaleString()} games</td></tr>`); });
   $("scale-body").innerHTML = rows.join("");
-  $("custom-note").hidden = isDefault();
-  $("tuned-note").textContent = isDefault() ? "Default weights." : "You're viewing custom weights.";
   if(BASE){ const b = BASE.cal; $("pool-counts").textContent = `: ${b.F.n.toLocaleString()} forward games, ${b.D.n.toLocaleString()} defenseman games, and ${b.G.n.toLocaleString()} goalie games from ${BASE.games.toLocaleString()} games through ${shortDay(BASE.through).replace(/^\w+, /, "")}`;
     $("season-note").textContent = `${String(BASE.season).slice(0,4)}–${String(BASE.season).slice(6)} season`; }
-}
-const dec = step => step < .01 ? 3 : 2;
-function buildSliders(){
-  $("sliders").innerHTML = E.SLIDER_GROUPS.map(([gname, items]) => `<div class="sl-group"><div class="label">${gname}</div>${items.map(([k,l,min,max,step]) => `
-    <div class="sl"><label for="w-${k}"><span>${l}</span><span class="mono" id="v-${k}">${W[k].toFixed(dec(step))}</span></label>
-    <input type="range" id="w-${k}" data-k="${k}" data-step="${step}" min="${min}" max="${max}" step="${step}" value="${W[k]}"></div>`).join("")}</div>`).join("");
 }
 function renderAll(){ rateAll(); renderSlate(); renderLeaderboard(); renderGame(); renderScale(); }
 
@@ -413,19 +399,12 @@ document.addEventListener("visibilitychange", () => { if(!document.hidden && SCH
 
 let raf = 0;
 const rerender = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => { const y = window.scrollY; renderAll(); window.scrollTo(0, y); }); };
-$("sliders").addEventListener("input", e => {
-  const k = e.target.dataset.k; if(!k) return;
-  W[k] = +e.target.value; $("v-" + k).textContent = W[k].toFixed(dec(+e.target.dataset.step));
-  store.set("ice-w", W); rerender();
-});
-document.querySelectorAll("input[data-s]").forEach(inp => inp.addEventListener("input", () => { SCALE[inp.dataset.s] = +inp.value; store.set("ice-scale", SCALE); rerender(); }));
-$("reset").addEventListener("click", () => { W = { ...E.DEFAULTS }; SCALE = { ...E.SCALE_DEFAULT }; store.set("ice-w", null); store.set("ice-scale", null); buildSliders(); rerender(); });
 
 function showError(e){ $("slate").innerHTML = `<div class="empty">${esc(e.message || String(e))}</div>`; }
 
 // ---------- Boot ----------
 (async function boot(){
-  buildSliders(); renderScale();
+  renderScale();
   api("/api/baseline").then(b => { BASE = b; if(SCHED) rerender(); else renderScale(); })
     .catch(e => { $("pool-counts").textContent = " (the season comparison couldn't load, so ratings are graded against the games on this page)"; });
   try {
