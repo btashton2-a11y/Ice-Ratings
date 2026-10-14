@@ -98,8 +98,11 @@ export function scoreGame(g, W){
 
 // ---------- Calibration against the league ----------
 // Ratings come from where a raw score falls among every game of the same position this season.
-// rating = center + spread * z, where z is the normal score of that percentile.
-export const SCALE_DEFAULT = {center:6.6, spread:1.1};
+// rating = center + spread * z, where z is the normal score of that percentile. Above z = knee (the top ~2% of
+// games) the scale climbs more slowly, so 8s and 9s stay reachable but a 10 needs z of 4.5: a historic game.
+export const SCALE_DEFAULT = {center:6.6, spread:1.1, knee:2.0, top:0.48};
+export const ratingFromZ = (z, s = SCALE_DEFAULT) => Math.max(3, Math.min(10, z <= (s.knee ?? 99) ? s.center + s.spread*z : s.center + s.spread*s.knee + s.top*(z - s.knee)));
+export const zForRating = (r, s = SCALE_DEFAULT) => { const k = s.center + s.spread*(s.knee ?? 99); return r <= k ? (r - s.center)/s.spread : s.knee + (r - k)/s.top; };
 export const normCdf = z => { const t = 1/(1+0.2316419*Math.abs(z)), d = 0.3989423*Math.exp(-z*z/2);
   const p = d*t*(0.3193815+t*(-0.3565638+t*(1.781478+t*(-1.821256+t*1.330274)))); return z>0 ? 1-p : p; };
 export function probit(p){ // Acklam's inverse normal CDF
@@ -121,7 +124,8 @@ export function makeCal(raws){
 export function calibrate(raw, cal, scale = SCALE_DEFAULT){
   const {n, sd, q} = cal, pMin = 0.5/n, pMax = 1-0.5/n;
   let z, p;
-  if(raw > q[200]){ z = probit(pMax) + (raw-q[200])/sd; p = pMax; }
+  // Top 1%: measure how far past the 99th percentile the game is, so the season's best game isn't automatically a 10
+  if(raw > q[198]){ const tsd = (q[198] - q[100]) / 2.326 || sd; z = 2.326 + (raw - q[198]) / tsd; p = Math.min(pMax, Math.max(0.99, normCdf(z))); }
   else if(raw < q[0]){ z = probit(pMin) - (q[0]-raw)/sd; p = pMin; }
   else {
     let k = 0; while(k<199 && q[k+1] < raw) k++;
@@ -132,7 +136,7 @@ export function calibrate(raw, cal, scale = SCALE_DEFAULT){
     p = Math.min(pMax, Math.max(pMin, p));
     z = probit(p);
   }
-  return {rating: Math.max(3, Math.min(10, scale.center + scale.spread*z)), pct: p, z};
+  return {rating: ratingFromZ(z, scale), pct: p, z};
 }
 
 // ---------- Expected goals ----------

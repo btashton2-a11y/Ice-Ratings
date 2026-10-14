@@ -411,11 +411,12 @@ function showTip(el){
 // ---------- About ----------
 function renderAbout(){
   const c = SCALE.center, s = SCALE.spread;
-  $("scale-formula").textContent = `${c.toFixed(1)} + ${s.toFixed(2)} × z`;
+  $("scale-formula").textContent = `${c.toFixed(1)} + ${s.toFixed(2)} × z up to z = ${SCALE.knee}, then ${SCALE.top} per step of z after that`;
   const pct = v => v >= 99.95 ? "99.9" : v >= 99 ? v.toFixed(1) : String(Math.round(v));
   const rows = [`<tr><td class="mono">${c.toFixed(1)}</td><td>Half of all games at his position</td><td>The typical game</td></tr>`];
-  [7,8,9,10].forEach(r => { if(r <= c + 0.05) return; const z = (r - c)/s, share = 1 - E.normCdf(z);
-    rows.push(`<tr><td class="mono">${r === 10 ? "10.0" : r.toFixed(1) + "+"}</td><td>${pct(E.normCdf(z)*100)}%</td><td>About 1 in ${Math.max(2, Math.round(1/share)).toLocaleString()} games</td></tr>`); });
+  [7,8,9,9.5,10].forEach(r => { if(r <= c + 0.05) return; const z = E.zForRating(r, SCALE), share = 1 - E.normCdf(z);
+    const often = r === 10 ? "Only a handful of games a season" : r === 9.5 ? "About 1 in 2,000 games" : `About 1 in ${Math.max(2, Math.round(1/share)).toLocaleString()} games`;
+    rows.push(`<tr><td class="mono">${r === 10 ? "10.0" : r.toFixed(1) + "+"}</td><td>${r === 10 ? "99.99" : pct(E.normCdf(z)*100)}%</td><td>${often}</td></tr>`); });
   $("scale-body").innerHTML = rows.join("");
   if(BASE){ const b = BASE.cal; $("pool-counts").textContent = `: ${b.F.n.toLocaleString()} forward games, ${b.D.n.toLocaleString()} defenseman games, and ${b.G.n.toLocaleString()} goalie games from ${BASE.games.toLocaleString()} games so far`; }
 }
@@ -451,7 +452,8 @@ function renderPlayer(){
     ? [[curTot.gp, "Games"], [curTot.w, "Wins"], [avg == null ? "–" : avg.toFixed(2), "Avg rating"]]
     : [[curTot.gp, "Games"], [curTot.g, "Goals"], [curTot.a, "Assists"], [curTot.p, "Points"], [avg == null ? "–" : avg.toFixed(2), "Avg rating"]];
   const sub = [p.num != null ? `#${p.num}` : "", POS_NAME[p.pos] || p.pos, p.active ? p.teamName : "Retired"].filter(Boolean).join(" · ");
-  const tabs = [["profile","Profile"],["games",`Games${p.games.length ? ` (${p.games.length})` : ""}`],["career","Career"]];
+  const tabs = [["profile","Profile"],["stats","Stats"],["games",`Games${p.games.length ? ` (${p.games.length})` : ""}`],["career","Career"]];
+  if(playerTab === "stats" && (!LS || !ADV)) Promise.all([loadLS(), loadADV()]).then(() => { if(view === "player" && playerTab === "stats" && PLAYER === p) renderPlayer(); });
   host.innerHTML = `<button type="button" class="back" data-back>← Back</button>
   <article class="card">
     <div class="p-hero">
@@ -462,7 +464,7 @@ function renderPlayer(){
       ${p.active || curTot.gp ? `<div class="p-quick" aria-label="${seasonLabel(p.season)} season">${quick.map(([v,l]) => `<div><b>${v}</b><span>${l}</span></div>`).join("")}<div><b style="font-size:14px;font-family:var(--f-body);color:var(--muted)">${seasonLabel(p.season)}</b><span>Season</span></div></div>` : ""}
       <div class="tabs" role="tablist">${tabs.map(([k,l]) => `<button type="button" role="tab" data-ptab="${k}" aria-selected="${playerTab === k}">${l}</button>`).join("")}</div>
     </div>
-    <div class="panel" role="tabpanel">${playerTab === "profile" ? profilePanel(p) : playerTab === "games" ? gamesPanel(p, avg) : careerPanel(p)}</div>
+    <div class="panel" role="tabpanel">${playerTab === "profile" ? profilePanel(p) : playerTab === "stats" ? playerStatsPanel(p) : playerTab === "games" ? gamesPanel(p, avg) : careerPanel(p)}</div>
   </article>`;
 }
 function profilePanel(p){
@@ -624,65 +626,200 @@ function renderStandings(){
 }
 
 // ---------- League stats ----------
-let LEAD = null, ADV = null, statsTab = "skaters", advPos = "all", statsAt = 0;
+let LEAD = null, ADV = null, LS = null, statsTab = "skaters", advPos = "all", statsAt = 0;
+let statsDetail = null, detailPos = "all", detailN = 50;
 const fmtToiPG = v => `${Math.floor(v/60)}:${String(Math.round(v%60)).padStart(2,"0")}`;
-const LEAD_CATS = {
-  skaters: [["points","Points"],["goals","Goals"],["assists","Assists"],["plusMinus","Plus/minus", v => (v > 0 ? "+" : "") + v],["goalsPp","Power-play goals"],["goalsSh","Shorthanded goals"],["toi","Ice time per game", fmtToiPG],["faceoffLeaders","Faceoff win %", v => (v*100).toFixed(1) + "%"],["penaltyMins","Penalty minutes"]],
-  goalies: [["wins","Wins"],["savePctg","Save %", v => v.toFixed(3).replace(/^0/, "")],["goalsAgainstAverage","Goals-against average", v => v.toFixed(2)],["shutouts","Shutouts"]]
-};
+const f3 = v => v.toFixed(3).replace(/^0/, ""), fPct = v => (v*100).toFixed(1) + "%", fSgn = v => (v > 0 ? "+" : "") + v.toFixed(2), f2 = v => v.toFixed(2), fPm = v => (v > 0 ? "+" : "") + v;
+const SK_F = ["id","name","team","pos","gp","g","a","p","pm","pim","ppg","ppp","shg","shp","gwg","sog","shPct","toi","fo","fot","hits","blk","tk","gv"];
+const GO_F = ["id","name","team","gp","gs","w","l","otl","sa","sv","ga","svp","gaa","so","toi"];
+const toObj = (F, r) => Object.fromEntries(F.map((k,i) => [k, r[i]]));
+let LS_P = null, ADV_P = null;
+function loadLS(){ return LS_P ||= api("/api/league-stats").then(j => { LS = { sk: j.skaters.map(r => toObj(SK_F, r)), go: j.goalies.map(r => toObj(GO_F, r)) }; return LS; }).catch(e => { LS = { error: e.message }; LS_P = null; return LS; }); }
+function loadADV(){ return ADV_P ||= api("/api/season-stats").then(j => (ADV = j)).catch(e => { ADV = { error: e.message }; ADV_P = null; return ADV; }); }
 async function loadStats(){
   const host = $("view-stats");
-  const fresh = Date.now() - statsAt < 10*60*1000;
-  if(LEAD && fresh){ renderStats(); return; }
   if(!LEAD) host.innerHTML = `<div class="card loading">Loading league stats…</div>`;
-  try { LEAD = await api("/api/leaders"); statsAt = Date.now(); renderStats(); }
-  catch(e){ if(!LEAD) host.innerHTML = `<div class="card empty-card">${esc(e.message)}</div>`; }
-  api("/api/season-stats").then(j => { ADV = j; if(view === "stats") renderStats(); }).catch(e => { ADV = { error: e.message }; if(view === "stats" && statsTab === "advanced") renderStats(); });
+  if(LEAD && Date.now() - statsAt < 10*60*1000){ renderStats(); }
+  else {
+    try { LEAD = await api("/api/leaders"); statsAt = Date.now(); renderStats(); }
+    catch(e){ if(!LEAD){ host.innerHTML = `<div class="card empty-card">${esc(e.message)}</div>`; return; } }
+  }
+  loadLS().then(() => { if(view === "stats") renderStats(); });
+  loadADV().then(() => { if(view === "stats") renderStats(); });
 }
-function leaderCard(title, rows, fmtV, note = ""){
+// Qualifiers for rate stats, scaled to how far into the season we are
+const qualSk = arr => Math.max(1, Math.ceil(Math.max(1, ...arr.map(p => p.gp)) * 0.4));
+const qualGo = arr => Math.max(1, Math.ceil(Math.max(1, ...arr.map(p => p.gp)) * 0.3));
+const rankList = (arr, key, { min = () => true, asc = false, sub } = {}) =>
+  arr.filter(p => p[key] != null && !Number.isNaN(p[key]) && min(p)).sort((a,b) => asc ? a[key] - b[key] : b[key] - a[key]).map(p => ({ ...p, v: p[key], sub: sub ? sub(p) : "" }));
+// Every category: title, formatter, note, official top-10 key (if any), and a full ranked list
+function statCats(tab){
+  if(tab === "advanced"){
+    if(!ADV || ADV.error) return [];
+    const S = ADV.skaters, G = ADV.goalies, q = qualSk(S), gq = qualGo(G), qual = `Minimum ${q} game${q === 1 ? "" : "s"}.`;
+    return [
+      { key:"rating", title:"Average Puck Rating", fmt:f2, pos:true, note:`This site's 0–10 game rating, averaged. ${qual}`, list: () => rankList(S, "rating", { min: p => p.rated >= q, sub: p => `${p.rated} GP` }) },
+      { key:"ixg", title:"Expected goals", fmt:f2, pos:true, note:"Goals an average shooter would score from his shots (MoneyPuck.com's model for finished games).", list: () => rankList(S, "ixg", { sub: p => `${p.g} G` }) },
+      { key:"gax", title:"Goals above expected", fmt:fSgn, pos:true, note:"Goals minus expected goals (empty-net goals left out). Finishing talent, or a hot streak.", list: () => rankList(S, "gax", { sub: p => `${p.g} G on ${p.ixg.toFixed(1)} xG` }) },
+      { key:"xgPct", title:"5-on-5 expected goal share", fmt:fPct, pos:true, note:`Of the expected goals at 5-on-5 while he's on the ice, the share his team creates. 50% is even. ${qual}`, list: () => rankList(S, "xgPct", { min: p => p.gp >= q && p.xgf5 + p.xga5 >= 1 }) },
+      { key:"cfPct", title:"5-on-5 shot attempt share", fmt:fPct, pos:true, note:`Corsi: share of all shot attempts at 5-on-5 while he's on the ice. ${qual}`, list: () => rankList(S, "cfPct", { min: p => p.gp >= q }) },
+      { key:"hd", title:"High-danger chances", fmt:null, pos:true, note:"Unblocked shots from the slot and crease, where most goals come from.", list: () => rankList(S, "hd") },
+      { key:"p60", title:"Points per 60 minutes", fmt:f2, pos:true, note:`Scoring rate by ice time, all situations. ${qual}, 10+ minutes a game.`, list: () => rankList(S, "p60", { min: p => p.gp >= q && p.toi >= p.gp * 600, sub: p => `${p.p} P` }) },
+      { key:"icf", title:"Shot attempts", fmt:null, pos:true, note:"Every shot he tried: on goal, missed or blocked.", list: () => rankList(S, "icf") },
+      { key:"gsax", title:"Goals saved above expected", fmt:fSgn, goalie:true, note:"Expected goals against minus goals allowed. The best single measure of a goalie's work.", list: () => rankList(G, "gsax", { sub: p => `${p.gp} GP` }) },
+      { key:"hdsv", title:"High-danger save %", fmt:f3, goalie:true, note:`Save % on chances from the slot and crease. Minimum ${gq} games.`, list: () => rankList(G, "hdsv", { min: p => p.gp >= gq, sub: p => `${p.hdf} faced` }) },
+      { key:"grating", title:"Average Puck Rating (goalies)", fmt:f2, goalie:true, note:`This site's game rating for goalies, averaged. Minimum ${gq} games.`, list: () => rankList(G, "rating", { min: p => p.rated >= gq, sub: p => `${p.rated} GP` }) }
+    ];
+  }
+  const S = LS && !LS.error ? LS.sk : null, G = LS && !LS.error ? LS.go : null;
+  if(tab === "skaters"){
+    const q = S ? qualSk(S) : 1, foMin = S ? Math.max(20, 6 * q) : 20;
+    const L = (key, opts) => () => S ? rankList(S, key, opts) : null;
+    return [
+      { key:"points", title:"Points", lead:"points", pos:true, list: L("p") },
+      { key:"goals", title:"Goals", lead:"goals", pos:true, list: L("g") },
+      { key:"assists", title:"Assists", lead:"assists", pos:true, list: L("a") },
+      { key:"plusMinus", title:"Plus/minus", lead:"plusMinus", fmt:fPm, pos:true, list: L("pm") },
+      { key:"goalsPp", title:"Power-play goals", lead:"goalsPp", pos:true, list: L("ppg") },
+      { key:"ppp", title:"Power-play points", pos:true, list: L("ppp") },
+      { key:"goalsSh", title:"Shorthanded goals", lead:"goalsSh", pos:true, list: L("shg") },
+      { key:"sog", title:"Shots on goal", pos:true, list: L("sog") },
+      { key:"shPct", title:"Shooting %", fmt:fPct, pos:true, note:`Minimum ${Math.max(10, 3*q)} shots.`, list: L("shPct", { min: p => p.sog >= Math.max(10, 3*q) }) },
+      { key:"toi", title:"Ice time per game", lead:"toi", fmt:fmtToiPG, pos:true, note:`Minimum ${q} games.`, list: L("toi", { min: p => p.gp >= q }) },
+      { key:"faceoffLeaders", title:"Faceoff win %", lead:"faceoffLeaders", fmt:fPct, pos:true, note:`Minimum ${foMin} faceoffs.`, list: L("fo", { min: p => (p.fot ?? 0) >= foMin, sub: p => `${p.fot} taken` }) },
+      { key:"hits", title:"Hits", pos:true, list: L("hits") },
+      { key:"blk", title:"Blocked shots", pos:true, list: L("blk") },
+      { key:"tk", title:"Takeaways", pos:true, list: L("tk") },
+      { key:"penaltyMins", title:"Penalty minutes", lead:"penaltyMins", pos:true, list: L("pim") }
+    ];
+  }
+  const gq = G ? qualGo(G) : 1;
+  const L = (key, opts) => () => G ? rankList(G, key, opts) : null;
+  return [
+    { key:"wins", title:"Wins", lead:"wins", list: L("w") },
+    { key:"savePctg", title:"Save %", lead:"savePctg", fmt:f3, note:`Minimum ${gq} games.`, list: L("svp", { min: p => p.gp >= gq }) },
+    { key:"goalsAgainstAverage", title:"Goals-against average", lead:"goalsAgainstAverage", fmt:f2, note:`Lower is better. Minimum ${gq} games.`, list: L("gaa", { min: p => p.gp >= gq, asc: true }) },
+    { key:"shutouts", title:"Shutouts", lead:"shutouts", list: L("so") },
+    { key:"saves", title:"Saves", list: L("sv") },
+    { key:"gp", title:"Games played", list: L("gp") }
+  ];
+}
+function leaderCard(c, rows){
   if(!rows || !rows.length) return "";
-  return `<section class="card lcard"><h3>${esc(title)}</h3>${note ? `<p class="lnote">${note}</p>` : ""}<ol>${rows.map((p,i) => `<li class="${i ? "" : "first"}"><button type="button" data-player="${p.id}">
+  const canAll = !!c.list && !!c.list();
+  return `<section class="card lcard"><h3>${esc(c.title)}</h3>${c.note ? `<p class="lnote">${c.note}</p>` : ""}<ol>${rows.slice(0, 10).map((p,i) => `<li class="${i ? "" : "first"}"><button type="button" data-player="${p.id}">
     <span class="rk">${i+1}</span><span class="av ${i ? "sm" : "md"}"><span class="face" aria-hidden="true">${initials(p.name)}${mug(p.id)}</span></span>
     <span class="who"><b>${esc(p.name)}</b><span>${logo(p.team)}${esc(p.team)}${p.pos ? ` · ${esc(p.pos)}` : ""}${p.sub ? ` · ${esc(p.sub)}` : ""}</span></span>
-    <span class="val">${fmtV ? fmtV(p.v) : esc(p.v)}</span></button></li>`).join("")}</ol></section>`;
+    <span class="val">${c.fmt ? c.fmt(p.v) : esc(p.v)}</span></button></li>`).join("")}</ol>
+    ${canAll ? `<button type="button" class="more-btn see-all" data-seeall="${c.key}">See all</button>` : ""}</section>`;
 }
-function advCards(){
-  if(!ADV) return `<div class="card loading">Crunching every game this season…</div>`;
-  if(ADV.error) return `<div class="card empty-card">${esc(ADV.error)}</div>`;
-  const posOk = p => advPos === "all" || (advPos === "D" ? p.pos === "D" : p.pos !== "D");
-  const S = ADV.skaters.filter(posOk), G = ADV.goalies;
-  const maxGp = Math.max(1, ...ADV.skaters.map(p => p.gp)), q = Math.max(1, Math.ceil(maxGp * 0.4));
-  const gMax = Math.max(1, ...G.map(p => p.gp)), gq = Math.max(1, Math.ceil(gMax * 0.3));
-  const top = (arr, key, { min = () => true, asc = false, sub } = {}) => arr.filter(p => p[key] != null && min(p)).sort((a,b) => asc ? a[key] - b[key] : b[key] - a[key]).slice(0, 10).map(p => ({ ...p, v: p[key], sub: sub ? sub(p) : "" }));
-  const pct = v => (v*100).toFixed(1) + "%", sgn = v => (v > 0 ? "+" : "") + v.toFixed(2), d2 = v => v.toFixed(2), d1 = v => v.toFixed(1);
-  const qual = `Minimum ${q} game${q === 1 ? "" : "s"}.`;
-  const sk = [
-    ["Average Puck Rating", top(S, "rating", { min: p => p.rated >= q, sub: p => `${p.rated} GP` }), d2, `This site's 0–10 game rating, averaged. ${qual}`],
-    ["Expected goals", top(S, "ixg", { sub: p => `${p.g} G` }), d2, "Goals an average shooter would score from his shots, based on location, shot type, rebounds and rushes."],
-    ["Goals above expected", top(S, "gax", { sub: p => `${p.g} G on ${p.ixg.toFixed(1)} xG` }), sgn, "Goals minus expected goals (empty-net goals left out). Finishing talent, or a hot streak."],
-    ["5-on-5 expected goal share", top(S, "xgPct", { min: p => p.gp >= q && p.xgf5 + p.xga5 >= 1 }), pct, `Of the expected goals at 5-on-5 while he's on the ice, the share his team creates. 50% is even. ${qual}`],
-    ["5-on-5 shot attempt share", top(S, "cfPct", { min: p => p.gp >= q }), pct, `Corsi: share of all shot attempts at 5-on-5 while he's on the ice. A puck-possession measure. ${qual}`],
-    ["High-danger chances", top(S, "hd", {}), null, "Unblocked shots from the slot and crease, where most goals come from."],
-    ["Points per 60 minutes", top(S, "p60", { min: p => p.gp >= q && p.toi >= p.gp * 600, sub: p => `${p.p} P` }), d2, `Scoring rate by ice time, all situations. ${qual}, 10+ minutes a game.`],
-    ["Shot attempts", top(S, "icf", {}), null, "Every shot he tried: on goal, missed or blocked."]
-  ];
-  const go = [
-    ["Goals saved above expected", top(G, "gsax", { sub: p => `${p.gp} GP` }), sgn, "Expected goals against minus goals allowed. The best single measure of a goalie's work."],
-    ["High-danger save %", top(G, "hdsv", { min: p => p.gp >= gq, sub: p => `${p.hdf} faced` }), v => v.toFixed(3).replace(/^0/, ""), `Save % on chances from the slot and crease. Minimum ${gq} games.`],
-    ["Average Puck Rating (goalies)", top(G, "rating", { min: p => p.rated >= gq, sub: p => `${p.rated} GP` }), d2, `This site's game rating for goalies, averaged. Minimum ${gq} games.`]
-  ];
-  return `<div class="seg small-seg" role="group" aria-label="Position">${[["all","All skaters"],["F","Forwards"],["D","Defense"]].map(([k,l]) => `<button type="button" data-advpos="${k}" aria-pressed="${advPos === k}">${l}</button>`).join("")}</div>
-    <div class="lgrid">${sk.map(([t, r, f, n]) => leaderCard(t, r, f, n)).join("")}</div>
-    <h2 class="sec-h">Goalies</h2><div class="lgrid">${go.map(([t, r, f, n]) => leaderCard(t, r, f, n)).join("")}</div>
-    <p class="muted small">Built from every shot and shift in ${ADV.games} games this season. Expected goals come from <a href="https://moneypuck.com" target="_blank" rel="noopener">MoneyPuck.com</a>, except for tonight's games until MoneyPuck posts them overnight. Ratings, on-ice shares and per-60 rates are this site's own.</p>`;
+function catTop(c){
+  if(c.lead && LEAD?.[statsTab]?.[c.lead]?.length) return LEAD[statsTab][c.lead];
+  const all = c.list(); if(!all) return null;
+  return all.filter(p => c.goalie || advPos === "all" || statsTab !== "advanced" || (advPos === "D" ? p.pos === "D" : p.pos !== "D"));
 }
 function renderStats(){
   const host = $("view-stats");
+  if(statsDetail){ renderStatsDetail(); return; }
   const tabs = [["skaters","Skaters"],["goalies","Goalies"],["advanced","Advanced"]];
   let body = "";
-  if(statsTab === "advanced") body = advCards();
-  else if(LEAD) body = `<div class="lgrid">${LEAD_CATS[statsTab].map(([k, t, f]) => leaderCard(t, LEAD[statsTab][k], f)).join("")}</div><p class="muted small">Official NHL leaders. Rate stats like save % and faceoff % use the NHL's minimums.</p>`;
+  if(statsTab === "advanced"){
+    if(!ADV) body = `<div class="card loading">Crunching every game this season…</div>`;
+    else if(ADV.error) body = `<div class="card empty-card">${esc(ADV.error)}</div>`;
+    else { const C = statCats("advanced");
+      body = `<div class="seg small-seg" role="group" aria-label="Position">${[["all","All skaters"],["F","Forwards"],["D","Defense"]].map(([k,l]) => `<button type="button" data-advpos="${k}" aria-pressed="${advPos === k}">${l}</button>`).join("")}</div>
+        <div class="lgrid">${C.filter(c => !c.goalie).map(c => leaderCard(c, catTop(c))).join("")}</div>
+        <h2 class="sec-h">Goalies</h2><div class="lgrid">${C.filter(c => c.goalie).map(c => leaderCard(c, catTop(c))).join("")}</div>
+        <p class="muted small">Built from every shot and shift in ${ADV.games} games this season. Expected goals come from <a href="https://moneypuck.com" target="_blank" rel="noopener">MoneyPuck.com</a>, except for tonight's games until MoneyPuck posts them overnight. Ratings, on-ice shares and per-60 rates are this site's own.</p>`; }
+  } else if(LEAD){
+    body = `<div class="lgrid">${statCats(statsTab).map(c => leaderCard(c, catTop(c))).join("")}</div><p class="muted small">Top 10s for the main categories are the NHL's official leaders. Tap "See all" for the full list.</p>`;
+  }
   host.innerHTML = `<div class="page-head"><h1>League stats</h1><div class="seg" role="tablist">${tabs.map(([k,l]) => `<button type="button" role="tab" data-sttab="${k}" aria-selected="${statsTab === k}">${l}</button>`).join("")}</div></div>${body}`;
+}
+function renderStatsDetail(){
+  const host = $("view-stats"), c = statCats(statsDetail.tab).find(x => x.key === statsDetail.key);
+  if(!c){ statsDetail = null; renderStats(); return; }
+  let all = c.list() || [];
+  const hasPos = !c.goalie && statsDetail.tab !== "goalies";
+  if(hasPos && detailPos !== "all") all = all.filter(p => detailPos === "D" ? p.pos === "D" : p.pos !== "D");
+  // tied values share a rank
+  let prev = null, rank = 0;
+  const ranked = all.map((p, i) => { if(p.v !== prev){ rank = i + 1; prev = p.v; } return { ...p, rank }; });
+  const shown = ranked.slice(0, detailN);
+  const tabName = { skaters:"Skaters", goalies:"Goalies", advanced:"Advanced" }[statsDetail.tab];
+  host.innerHTML = `<button type="button" class="back" data-statsback>← ${tabName}</button>
+  <section class="card stand-card detail">
+    <div class="detail-head"><div><h2>${esc(c.title)}</h2>${c.note ? `<p class="lnote">${c.note}</p>` : ""}</div>
+      ${hasPos ? `<div class="seg" role="group" aria-label="Position">${[["all","All"],["F","Forwards"],["D","Defense"]].map(([k,l]) => `<button type="button" data-detpos="${k}" aria-pressed="${detailPos === k}">${l}</button>`).join("")}</div>` : ""}</div>
+    ${shown.length ? `<div class="tbl-wrap"><table class="data lead-table"><thead><tr><th class="l rk">#</th><th class="l">Player</th><th>GP</th><th>${esc(c.title)}</th></tr></thead><tbody>
+      ${shown.map(p => `<tr class="click" data-player="${p.id}" tabindex="0"><td class="l rk">${p.rank}</td>
+        <td class="l"><span class="pcell"><span class="av sm"><span class="face" aria-hidden="true">${initials(p.name)}${mug(p.id)}</span></span><span class="who"><b>${esc(p.name)}</b><span>${logo(p.team)}${esc(p.team)}${p.pos ? ` · ${esc(p.pos)}` : ""}${p.sub ? ` · ${esc(p.sub)}` : ""}</span></span></span></td>
+        <td>${p.gp ?? "–"}</td><td class="val">${c.fmt ? c.fmt(p.v) : esc(p.v)}</td></tr>`).join("")}</tbody></table></div>` : `<p class="muted">No qualified players yet.</p>`}
+    ${ranked.length > detailN ? `<button type="button" class="more-btn" data-detmore>Show more (${ranked.length - detailN} left)</button>` : `<p class="muted small">${ranked.length} player${ranked.length === 1 ? "" : "s"}</p>`}
+  </section>`;
+}
+
+// ---------- Player stats tab ----------
+function rankOf(arr, id, key, { min = () => true, asc = false } = {}){
+  const list = arr.filter(p => p[key] != null && !Number.isNaN(p[key]) && min(p));
+  const me = list.find(p => p.id === id); if(!me || (!asc && me[key] <= 0)) return null;   // no rank for zero (or less) of a counting stat
+  const better = list.filter(p => asc ? p[key] < me[key] : p[key] > me[key]).length;
+  const tied = list.filter(p => p[key] === me[key]).length > 1;
+  return { rank: better + 1, of: list.length, tied };
+}
+function statTile(label, value, r, grpLbl){
+  const top = r && r.rank <= Math.max(3, Math.round(r.of * 0.05));
+  return `<div class="pstat${top ? " top" : ""}"><b>${value}</b><span>${esc(label)}</span>${r ? `<small>${r.tied ? "T-" : ""}${nth(r.rank)} of ${r.of} ${grpLbl}</small>` : `<small>&nbsp;</small>`}</div>`;
+}
+function playerStatsPanel(p){
+  if(!LS) return `<div class="muted">Loading season stats…</div>`;
+  if(LS.error) return `<div class="muted">${esc(LS.error)}</div>`;
+  const season = `${String(p.season).slice(0,4)}–${String(p.season).slice(6)}`;
+  const advNote = `<p class="muted small">Ranks compare him with every ${p.goalie ? "goalie" : p.pos === "D" ? "defenseman" : "forward"} this season. Rate stats only rank players who meet the minimum games. Expected goals from <a href="https://moneypuck.com" target="_blank" rel="noopener">MoneyPuck.com</a>.</p>`;
+  if(p.goalie){
+    const G = LS.go, me = G.find(g => g.id === p.id);
+    if(!me) return `<div class="muted">No NHL games this ${season} season yet.</div>`;
+    const gq = qualGo(G), lbl = "goalies";
+    const std = [
+      ["Games", me.gp, rankOf(G, p.id, "gp")], ["Wins", me.w, rankOf(G, p.id, "w")], ["Record", `${me.w}-${me.l}-${me.otl}`, null],
+      ["Save %", me.svp != null ? f3(me.svp) : "–", rankOf(G, p.id, "svp", { min: x => x.gp >= gq })], ["Goals-against avg", me.gaa != null ? f2(me.gaa) : "–", rankOf(G, p.id, "gaa", { min: x => x.gp >= gq, asc: true })],
+      ["Shutouts", me.so, rankOf(G, p.id, "so")], ["Saves", me.sv, rankOf(G, p.id, "sv")], ["Shots against", me.sa, null]
+    ];
+    let adv = "";
+    if(ADV && !ADV.error){ const A = ADV.goalies, a = A.find(g => g.id === p.id), aq = qualGo(A);
+      if(a) adv = `<h3 class="pstat-h">Advanced</h3><div class="pstat-grid">${[
+        ["Goals saved above expected", fSgn(a.gsax), rankOf(A, p.id, "gsax")], ["Expected goals against", f2(a.xga), null],
+        ["High-danger save %", a.hdsv != null ? f3(a.hdsv) : "–", rankOf(A, p.id, "hdsv", { min: x => x.gp >= aq })],
+        ["Average Puck Rating", a.rating != null ? f2(a.rating) : "–", rankOf(A, p.id, "rating", { min: x => x.rated >= aq })]
+      ].map(([l, v, r]) => statTile(l, v, r, lbl)).join("")}</div>`; }
+    else if(!ADV) adv = `<p class="muted small">Loading advanced stats…</p>`;
+    return `<h3 class="pstat-h">${season} season</h3><div class="pstat-grid">${std.map(([l, v, r]) => statTile(l, v, r, lbl)).join("")}</div>${adv}${advNote}`;
+  }
+  const isD = p.pos === "D", grp = LS.sk.filter(x => (x.pos === "D") === isD), me = grp.find(x => x.id === p.id), lbl = isD ? "defensemen" : "forwards";
+  if(!me) return `<div class="muted">No NHL games this ${season} season yet.</div>`;
+  const q = qualSk(LS.sk);
+  const std = [
+    ["Games", me.gp, null], ["Goals", me.g, rankOf(grp, p.id, "g")], ["Assists", me.a, rankOf(grp, p.id, "a")], ["Points", me.p, rankOf(grp, p.id, "p")],
+    ["Plus/minus", fPm(me.pm), rankOf(grp, p.id, "pm")], ["Power-play points", me.ppp, rankOf(grp, p.id, "ppp")], ["Shorthanded points", me.shp, rankOf(grp, p.id, "shp")],
+    ["Game-winning goals", me.gwg, rankOf(grp, p.id, "gwg")], ["Shots", me.sog, rankOf(grp, p.id, "sog")],
+    ["Shooting %", me.shPct != null && me.sog ? fPct(me.shPct) : "–", me.sog >= Math.max(10, 3*q) ? rankOf(grp, p.id, "shPct", { min: x => x.sog >= Math.max(10, 3*q) }) : null],
+    ["Ice time per game", fmtToiPG(me.toi), rankOf(grp, p.id, "toi", { min: x => x.gp >= q })],
+    ...(me.fot ? [["Faceoff win %", me.fo != null ? fPct(me.fo) : "–", null]] : []),
+    ["Hits", me.hits ?? "–", rankOf(grp, p.id, "hits")], ["Blocked shots", me.blk ?? "–", rankOf(grp, p.id, "blk")],
+    ["Takeaways", me.tk ?? "–", rankOf(grp, p.id, "tk")], ["Giveaways", me.gv ?? "–", null], ["Penalty minutes", me.pim, null]
+  ];
+  let adv = "";
+  if(ADV && !ADV.error){ const A = ADV.skaters.filter(x => (x.pos === "D") === isD), a = A.find(x => x.id === p.id), aq = qualSk(ADV.skaters);
+    if(a) adv = `<h3 class="pstat-h">Advanced</h3><div class="pstat-grid">${[
+      ["Average Puck Rating", a.rating != null ? f2(a.rating) : "–", rankOf(A, p.id, "rating", { min: x => x.rated >= aq })],
+      ["Expected goals", f2(a.ixg), rankOf(A, p.id, "ixg")], ["Goals above expected", fSgn(a.gax), rankOf(A, p.id, "gax")],
+      ["5-on-5 xG share", a.xgPct != null ? fPct(a.xgPct) : "–", rankOf(A, p.id, "xgPct", { min: x => x.gp >= aq && x.xgf5 + x.xga5 >= 1 })],
+      ["5-on-5 shot attempt share", a.cfPct != null ? fPct(a.cfPct) : "–", rankOf(A, p.id, "cfPct", { min: x => x.gp >= aq })],
+      ["High-danger chances", a.hd, rankOf(A, p.id, "hd")], ["Shot attempts", a.icf, rankOf(A, p.id, "icf")],
+      ["Points per 60", a.p60 != null ? f2(a.p60) : "–", rankOf(A, p.id, "p60", { min: x => x.gp >= aq && x.toi >= x.gp * 600 })]
+    ].map(([l, v, r]) => statTile(l, v, r, lbl)).join("")}</div>`; }
+  else if(!ADV) adv = `<p class="muted small">Loading advanced stats…</p>`;
+  return `<h3 class="pstat-h">${season} season</h3><div class="pstat-grid">${std.map(([l, v, r]) => statTile(l, v, r, lbl)).join("")}</div>${adv}${advNote}`;
 }
 
 // ---------- Loading ----------
@@ -760,7 +897,11 @@ document.addEventListener("click", e => {
   if(t.id === "see-prev"){ goDay(shiftDate(viewDate, -1)); return; }
   const stb = t.closest("[data-stab]"); if(stb){ standTab = stb.dataset.stab; standSort = null; renderStandings(); return; }
   const ss = t.closest("[data-ssort]"); if(ss){ const k = ss.dataset.ssort, c = STAND_COLS.find(c => c[0] === k); const d0 = c[2] < 0 ? 1 : -1; standSort = standSort?.k === k ? (standSort.d === d0 ? { k, d: -d0 } : null) : { k, d: d0 }; renderStandings(); return; }
-  const stt = t.closest("[data-sttab]"); if(stt){ statsTab = stt.dataset.sttab; renderStats(); return; }
+  const stt = t.closest("[data-sttab]"); if(stt){ statsTab = stt.dataset.sttab; statsDetail = null; renderStats(); return; }
+  const sa = t.closest("[data-seeall]"); if(sa){ statsDetail = { tab: statsTab, key: sa.dataset.seeall }; detailPos = statsTab === "advanced" ? advPos : "all"; detailN = 50; renderStats(); window.scrollTo(0, 0); return; }
+  if(t.closest("[data-statsback]")){ statsDetail = null; renderStats(); return; }
+  const dp = t.closest("[data-detpos]"); if(dp){ detailPos = dp.dataset.detpos; detailN = 50; renderStats(); return; }
+  if(t.closest("[data-detmore]")){ detailN += 50; renderStats(); return; }
   const ap = t.closest("[data-advpos]"); if(ap){ advPos = ap.dataset.advpos; renderStats(); return; }
   const sh = t.closest(".shot"); if(sh) showTip(sh);
 });
