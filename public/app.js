@@ -167,7 +167,8 @@ function renderGame(){
         <div><div class="final"><span class="${win === 1 ? "lose" : ""}">${A.sc}</span><span class="dash">–</span><span class="${win === 0 ? "lose" : ""}">${H.sc}</span></div><div class="status">${status}</div></div>
         <div class="team home">${logo(H.ab, "big")}<span class="abbr">${esc(H.ab)}</span><span class="nm">${esc(H.nm)}</span></div>
       </div>
-      <div class="xg-line">Expected goals <b class="mono">${xg(0).toFixed(2)}</b> – <b class="mono">${xg(1).toFixed(2)}</b></div>
+      <div class="xg-line">Expected goals <b class="mono">${xg(0).toFixed(2)}</b> – <b class="mono">${xg(1).toFixed(2)}</b>
+        <span class="xg-src">${g.xs === "moneypuck" ? `xG from <a href="https://moneypuck.com" target="_blank" rel="noopener">MoneyPuck.com</a>` : fin ? "Live-model xG · MoneyPuck's numbers arrive overnight" : "Live-model xG"}</span></div>
       <div class="periods"><table aria-label="Goals by period">
         <thead><tr><th></th>${perHead.map(h => `<th>${h}</th>`).join("")}${so ? "<th>SO</th>" : ""}<th>T</th><th>SOG</th></tr></thead>
         <tbody>${[0,1].map(s => `<tr><td>${esc(g.t[s].ab)}</td>${per[s].map(v => `<td>${v}</td>`).join("")}${so ? `<td>${s === win ? 1 : 0}</td>` : ""}<td class="tot">${g.t[s].sc}</td><td class="tot">${g.t[s].sog}</td></tr>`).join("")}</tbody>
@@ -673,7 +674,7 @@ function advCards(){
   return `<div class="seg small-seg" role="group" aria-label="Position">${[["all","All skaters"],["F","Forwards"],["D","Defense"]].map(([k,l]) => `<button type="button" data-advpos="${k}" aria-pressed="${advPos === k}">${l}</button>`).join("")}</div>
     <div class="lgrid">${sk.map(([t, r, f, n]) => leaderCard(t, r, f, n)).join("")}</div>
     <h2 class="sec-h">Goalies</h2><div class="lgrid">${go.map(([t, r, f, n]) => leaderCard(t, r, f, n)).join("")}</div>
-    <p class="muted small">Advanced stats come from this site's own models, built from every shot and shift in ${ADV.games} games this season. They can differ from other sites that use different models.</p>`;
+    <p class="muted small">Built from every shot and shift in ${ADV.games} games this season. Expected goals come from <a href="https://moneypuck.com" target="_blank" rel="noopener">MoneyPuck.com</a>, except for tonight's games until MoneyPuck posts them overnight. Ratings, on-ice shares and per-60 rates are this site's own.</p>`;
 }
 function renderStats(){
   const host = $("view-stats");

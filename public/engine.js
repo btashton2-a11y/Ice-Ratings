@@ -122,14 +122,18 @@ export function calibrate(raw, cal, scale = SCALE_DEFAULT){
 
 // ---------- Expected goals ----------
 // Chance an average shooter scores, from the NHL's shot coordinates (x toward the attacked net at x=89).
+// Finished games use MoneyPuck.com's expected goals (lib/moneypuck.js). This model covers live games and anything
+// MoneyPuck hasn't posted yet: it was trained to reproduce MoneyPuck's value on every unblocked shot of the 2026-27
+// season through Oct 13 (8,572 shots; team-game totals within 0.26 xG on average, same league total).
+const XG_W = { int:-1.0042, d:-0.3879, d2:-0.0343, far:0.1054, ang:0.0344, ang2:-0.0255, crease:0.004,
+  type:{ 'tip-in':-0.6849, 'deflected':-0.1851, 'backhand':-0.3497, 'slap':0.4736, 'wrap-around':-0.3119, 'snap':0.317 },
+  reb:-0.1575, rush:-0.2635, pp:0.2534, sh:0.0195 };
 export function xgModel(x, y, type, flags){
   const dx = 89 - x, d = Math.hypot(dx, y), ang = Math.abs(Math.atan2(y, Math.max(dx,0.1))*180/Math.PI);
-  if(flags.includes('e')) return Math.max(0.30, Math.min(0.95, 1.05 - 0.006*d));
-  if(x < 25) return 0.01;
-  const dd = Math.min(d, 62);
-  let z = -0.15 - 0.10*dd + 0.0008*dd*dd - 0.03*Math.max(0, d-62) - 0.010*Math.min(ang,80);
-  z += ({'tip-in':0.35,'deflected':0.35,'backhand':-0.10,'slap':0.10,'wrap-around':-0.50,'between-legs':0.2}[type] ?? 0);
-  if(flags.includes('r')) z += 0.80; if(flags.includes('u')) z += 0.30; if(flags.includes('p')) z += 0.30;
+  if(flags.includes('e')) return 1/(1+Math.exp(-(0.99 - 0.0122*d)));
+  const dd = Math.min(d, 62)/10, a = Math.min(ang, 80)/10, W = XG_W;
+  let z = W.int + W.d*dd + W.d2*dd*dd + W.far*Math.max(0, d-62)/10 + W.ang*a + W.ang2*a*a + (d < 10 ? W.crease : 0) + (W.type[type] ?? 0);
+  if(flags.includes('r')) z += W.reb; if(flags.includes('u')) z += W.rush; if(flags.includes('p')) z += W.pp; if(flags.includes('s')) z += W.sh;
   return 1/(1+Math.exp(-z));
 }
 export const isHD = (x, y) => { const dx = 89 - x, d = Math.hypot(dx, y), ang = Math.abs(Math.atan2(y, Math.max(dx,0.1))*180/Math.PI); return d <= 25 && ang <= 45 ? 1 : 0; };
