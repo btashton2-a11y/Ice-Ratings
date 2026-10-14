@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Ice Ratings</title>
+<title>Puck Ratings</title>
 <meta name="description" content="Player ratings for every NHL game, graded against every game played at the same position this season.">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23147a63'/%3E%3Ctext x='16' y='21.5' font-family='Arial' font-weight='700' font-size='14' text-anchor='middle' fill='white'%3E8.4%3C/text%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%231fa383'/%3E%3Cstop offset='1' stop-color='%230d5646'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='15' fill='url(%23g)'/%3E%3Cpath d='M51.5 6 L24 46 Q21 50.5 15.5 50.5 L9.5 50.5 Q5.5 50.5 5.5 46.75 Q5.5 43 9.5 43 L17.5 43 Q19.6 43 21 41 L45.5 2 Z' fill='%23fff'/%3E%3Cpath d='M45.5 2 L51.5 6 L49.2 9.4 L43.2 5.3 Z' fill='%230b1117'/%3E%3Cpath d='M10 43 h3 v7.5 h-3 Z M15 43 h3 v7.5 h-3 Z' fill='%230b1117' opacity='.85'/%3E%3Cpath d='M34 48 v6 a12 5.5 0 0 0 24 0 v-6 Z' fill='%230b1117'/%3E%3Cellipse cx='46' cy='48' rx='12' ry='5.5' fill='%2333414d'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
@@ -45,7 +45,7 @@ h1,h2,h3{margin:0;font-weight:650;letter-spacing:-.01em;text-wrap:balance}
 .top{position:sticky;top:0;z-index:20;background:color-mix(in srgb, var(--surface) 92%, transparent);backdrop-filter:saturate(1.4) blur(10px);-webkit-backdrop-filter:saturate(1.4) blur(10px);border-bottom:1px solid var(--line);padding-top:env(safe-area-inset-top,0px)}
 .top .wrap{display:flex;align-items:center;gap:16px;min-height:60px;flex-wrap:wrap;padding-block:8px}
 .brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:18px;letter-spacing:-.02em;background:none;border:0;padding:0;cursor:pointer}
-.brand i{font-style:normal;font-family:var(--f-mono);font-size:12px;font-weight:500;background:var(--accent);color:#fff;border-radius:7px;padding:3px 6px}
+.brand img{width:30px;height:30px;border-radius:8px;display:block}
 .nav{display:flex;gap:4px}
 .nav button{border:0;background:none;padding:7px 12px;border-radius:999px;color:var(--muted);font-weight:500;cursor:pointer}
 .nav button:hover{background:var(--hover);color:var(--ink)}
@@ -374,7 +374,7 @@ footer{color:var(--muted);font-size:12.5px;padding-block:8px 32px}
 <body>
 <header class="top gutter">
   <div class="wrap">
-    <button type="button" class="brand" id="home-btn" aria-label="Ice Ratings, go to today's scores"><i aria-hidden="true">8.4</i>Ice Ratings</button>
+    <button type="button" class="brand" id="home-btn" aria-label="Puck Ratings, go to today's scores"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%231fa383'/%3E%3Cstop offset='1' stop-color='%230d5646'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='15' fill='url(%23g)'/%3E%3Cpath d='M51.5 6 L24 46 Q21 50.5 15.5 50.5 L9.5 50.5 Q5.5 50.5 5.5 46.75 Q5.5 43 9.5 43 L17.5 43 Q19.6 43 21 41 L45.5 2 Z' fill='%23fff'/%3E%3Cpath d='M45.5 2 L51.5 6 L49.2 9.4 L43.2 5.3 Z' fill='%230b1117'/%3E%3Cpath d='M10 43 h3 v7.5 h-3 Z M15 43 h3 v7.5 h-3 Z' fill='%230b1117' opacity='.85'/%3E%3Cpath d='M34 48 v6 a12 5.5 0 0 0 24 0 v-6 Z' fill='%230b1117'/%3E%3Cellipse cx='46' cy='48' rx='12' ry='5.5' fill='%2333414d'/%3E%3C/svg%3E" alt="" width="30" height="30">Puck Ratings</button>
     <nav class="nav" aria-label="Main">
       <button type="button" data-view="scores" aria-current="page">Scores</button>
       <button type="button" data-view="about">How it works</button>
