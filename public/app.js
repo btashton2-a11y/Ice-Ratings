@@ -120,7 +120,13 @@ function avatar(pl, large, isStar){ return `<span class="av${large ? " lg" : ""}
 function renderGame(){
   const host = $("game");
   const g = GAMES.get(current);
-  if(!g || !RATED[g.id]){ host.innerHTML = current ? `<div class="card empty">Loading game…</div>` : ""; return; }
+  if(!g || !RATED[g.id]){
+    if(current){ host.innerHTML = `<div class="card empty">Loading game…</div>`; return; }
+    const upcoming = (SCHED?.games || []).filter(s => !started(s.st) && s.st !== "PPD" && s.start).sort((a,b) => a.start.localeCompare(b.start));
+    host.innerHTML = upcoming.length && !(SCHED.games || []).some(s => started(s.st))
+      ? `<div class="card empty pre">No games have started yet. First puck drop is at <b>${localTime(upcoming[0].start)}</b>, and ratings appear as soon as it begins. <button type="button" class="btn sm" id="see-prev">See the previous night</button></div>` : "";
+    return;
+  }
   const R = RATED[g.id], names = g.p.map(r => r[3]);
   const [A, H] = g.t, fin = done(g.st), win = fin ? (A.sc > H.sc ? 0 : 1) : -1;
   const xg = side => g.s.filter(s => s[1] === side && s[2] !== "B").reduce((a,s) => a + s[6], 0) / 1000;
@@ -372,7 +378,7 @@ function schedulePoll(){
   if(anyLive || soon) pollTimer = setTimeout(refresh, 60*1000);
   else if(recentDone || viewDate >= SCHED.today) pollTimer = setTimeout(refresh, 5*60*1000);
 }
-function setHash(){ try { history.replaceState(null, "", current ? `#g${current}` : `#d${viewDate}`); } catch(e){} }
+function setHash(){ try { history.replaceState(null, "", current ? `#g${current}` : location.pathname); } catch(e){} }
 
 // ---------- Events ----------
 function selectGame(id, playerId){
@@ -395,6 +401,7 @@ const goDay = d => { current = null; $("slate").innerHTML = `<div class="empty">
 $("prev-day").addEventListener("click", () => goDay(shiftDate(viewDate, -1)));
 $("next-day").addEventListener("click", () => goDay(shiftDate(viewDate, 1)));
 $("today-btn").addEventListener("click", () => goDay(SCHED.today));
+document.addEventListener("click", e => { if(e.target.id === "see-prev") goDay(shiftDate(viewDate, -1)); });
 document.addEventListener("visibilitychange", () => { if(!document.hidden && SCHED && SCHED.games.some(g => live(g.st))) refresh(); });
 
 let raf = 0;
@@ -417,8 +424,7 @@ function showError(e){ $("slate").innerHTML = `<div class="empty">${esc(e.messag
       await loadDay(m[1]);
     } else {
       const t = await api(`/api/schedule`);
-      const anyStarted = t.games.some(g => started(g.st));
-      await loadDay(anyStarted ? t.date : shiftDate(t.date, -1));
+      await loadDay(t.date);
     }
   } catch(e){ showError(e); }
 })();
