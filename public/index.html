@@ -498,7 +498,7 @@ footer{color:var(--muted);font-size:12.5px;padding-block:8px 32px}
     <section class="view" id="view-about" hidden>
       <div class="card about">
         <h1>How the ratings work</h1>
-        <p>Each player gets a game score from 23 stats: the box score, every shot with its expected-goal value, and what happened while he was on the ice at even strength (matched from the NHL's shift charts). That score is compared with every game played at the same position this season<span id="pool-counts"></span>. Where it lands sets the rating.</p>
+        <p>Each player gets a game score from 23 stats: the box score, every shot with its expected-goal value, and what happened while he was on the ice at even strength (matched from the NHL's shift charts). That score is compared with every game played at the same position this season<span id="pool-counts"></span>. Where it lands sets the rating. Forwards and defensemen are weighted differently. A defenseman's score leans more on keeping chances against down (compared with what's typical for his minutes), blocked shots, takeaways and moving the puck, and less on shot volume.</p>
         <p>During a live game, ratings update every minute and are compared with full games, so they start low and climb as players build their night.</p>
         <table class="scale-table" aria-label="Rating scale"><thead><tr><th>Rating</th><th>Means the game beat</th><th>How often</th></tr></thead><tbody id="scale-body"></tbody></table>
         <p>Ratings are the player's percentile converted to a normal score <span class="mono">z</span>, then <span class="mono" id="scale-formula"></span>, capped between 3.0 and 10.0.</p>

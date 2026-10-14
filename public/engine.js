@@ -1,13 +1,24 @@
-// Ice Ratings engine. Shared by the server (api/) and the page (public/index.html).
+// Puck Ratings engine. Shared by the server (api/) and the page (public/index.html).
 export const SHOT_TYPES = ['wrist','snap','slap','backhand','tip-in','deflected','wrap-around','poke','bat','between-legs','cradle',''];
+// Forward weights (and goalie weights). Defensemen use these with DEFENSE_WEIGHTS on top.
 export const DEFAULTS = {
   goal:0.8, enGoal:0.25, ixg:0.6, a1:0.55, a2:0.3,
   sog:0.03, icf:0.015, hd:0.06,
-  gd5:0.15, xgd5:0.35, cfd5:0.01,
-  hit:0.04, block:0.1, take:0.12, give:0.12,
-  penTaken:0.25, penDrawn:0.15, fo:0.02, toi:0.03,
+  gf5:0.15, ga5:0.15, xgf5:0.35, xga5:0.35, cfd5:0.01,
+  hit:0.04, block:0.08, take:0.12, give:0.12,
+  penTaken:0.25, penDrawn:0.15, fo:0.02, toi:0.03, toiBase:15,
   gsax:0.45, hdsv:0.03, shsv:0.02, win:0.3
 };
+// Defensemen: judged more on keeping chances against down, blocking and winning pucks back, and moving the puck
+// (secondary assists), less on shot volume; no faceoffs; ice time measured against a 20-minute night.
+export const DEFENSE_WEIGHTS = {
+  ixg:0.5, a1:0.5, a2:0.35, sog:0.02, icf:0.01, hd:0.05,
+  gf5:0.12, ga5:0.22, xgf5:0.25, xga5:0.50, cfd5:0.015,
+  hit:0.05, block:0.15, take:0.15, give:0.15, fo:0, toi:0.04, toiBase:20
+};
+// League-average even-strength rates while a skater is on the ice, per minute of his ice time (2026-27 through Oct 13).
+// On-ice results are measured against these, so a defenseman isn't penalized just for playing big minutes.
+export const ON_ICE_PER_MIN = { xg: 0.0351, g: 0.035 };
 export const MIN_TOI_SK = 300, MIN_TOI_G_BASE = 1200;
 export const grpOf = pos => pos==="G" ? "G" : pos==="D" ? "D" : "F";
 export const fmtToi = s => `${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`;
@@ -49,6 +60,7 @@ export function scorePlayer(g, i, dv, W){
       line:`${sv}/${sa} saves · ${gsax>=0?"+":""}${gsax.toFixed(2)} GSAx · ${fmtToi(toi)}`};
   }
   const [side,id,num,name,pos,goals,assists,pm,pim,hits,ppg,sog,toi,blk,gv,tk,fw,fl,pt,pd,cf,ca,xgf,xga,gf,ga] = r, s = dv[i];
+  if(pos === "D") W = { ...W, ...(W.D || DEFENSE_WEIGHTS) };
   const regG = goals - s.en, tm = toi/60;
   add("Scoring", `Goals (${regG}${ppg?`, ${ppg} on PP`:""})`, regG*W.goal);
   if(s.en) add("Scoring", `Empty-net goals (${s.en})`, s.en*W.enGoal);
@@ -58,8 +70,11 @@ export function scorePlayer(g, i, dv, W){
   add("Shooting", `Shots on goal (${sog})`, sog*W.sog);
   add("Shooting", `Shot attempts (${s.icf})`, s.icf*W.icf);
   add("Shooting", `High-danger chances (${s.hd})`, s.hd*W.hd);
-  add("On-ice, even strength", `Goals for/against (${gf}–${ga})`, (gf-ga)*W.gd5);
-  add("On-ice, even strength", `Expected goals for/against (${(xgf/1000).toFixed(2)}–${(xga/1000).toFixed(2)})`, ((xgf-xga)/1000)*W.xgd5);
+  const eX = tm * ON_ICE_PER_MIN.xg, eG = tm * ON_ICE_PER_MIN.g;   // typical on-ice totals for his minutes
+  add("On-ice, even strength", `Goals for (${gf}, typical ${eG.toFixed(1)})`, (gf-eG)*W.gf5);
+  add("On-ice, even strength", `Goals against (${ga}, typical ${eG.toFixed(1)})`, (eG-ga)*W.ga5);
+  add("On-ice, even strength", `Expected goals for (${(xgf/1000).toFixed(2)}, typical ${eX.toFixed(2)})`, (xgf/1000-eX)*W.xgf5);
+  add("On-ice, even strength", `Expected goals against (${(xga/1000).toFixed(2)}, typical ${eX.toFixed(2)})`, (eX-xga/1000)*W.xga5);
   add("On-ice, even strength", `Shot attempts for/against (${cf}–${ca})`, (cf-ca)*W.cfd5);
   add("Physical and puck", `Hits (${hits})`, hits*W.hit);
   add("Physical and puck", `Blocked shots (${blk})`, blk*W.block);
@@ -68,7 +83,7 @@ export function scorePlayer(g, i, dv, W){
   add("Discipline and draws", `Penalties taken (${pt})`, -pt*W.penTaken);
   add("Discipline and draws", `Penalties drawn (${pd})`, pd*W.penDrawn);
   if(fw+fl) add("Discipline and draws", `Faceoffs (${fw}–${fl})`, (fw-fl)*W.fo);
-  add("Discipline and draws", `Ice time (${fmtToi(toi)})`, Math.max(-.15, Math.min(.3, (tm-15)*W.toi)));
+  add("Discipline and draws", `Ice time (${fmtToi(toi)})`, Math.max(-.15, Math.min(.3, (tm-(W.toiBase ?? 15))*W.toi)));
   return {i, id, num, name, pos, side, goalie:false, rows, raw: rows.reduce((a,x)=>a+x[2],0), toi,
     adv:{ixg:s.ixg, gax: regG - s.ixg, icf:s.icf, blockedBy:s.blockedBy, miss:s.miss, fw, fl,
       cfpct: cf+ca ? cf/(cf+ca) : null, xgpct: xgf+xga ? xgf/(xgf+xga) : null},
