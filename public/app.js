@@ -577,7 +577,7 @@ async function loadStandings(){
   const host = $("view-standings");
   if(STAND && Date.now() - standAt < 5*60*1000){ renderStandings(); return; }
   if(!STAND) host.innerHTML = `<div class="card loading">Loading standings…</div>`;
-  try { STAND = await api("/api/standings"); standAt = Date.now(); renderStandings(); }
+  try { STAND = await api("/api/league?view=standings"); standAt = Date.now(); renderStandings(); }
   catch(e){ if(!STAND) host.innerHTML = `<div class="card empty-card">${esc(e.message)}</div>`; }
 }
 function standTable(rows, { title = "", seqKey = "leagueSeq", cut = 0, startRank = 1, sortable = true } = {}){
@@ -634,14 +634,14 @@ const SK_F = ["id","name","team","pos","gp","g","a","p","pm","pim","ppg","ppp","
 const GO_F = ["id","name","team","gp","gs","w","l","otl","sa","sv","ga","svp","gaa","so","toi"];
 const toObj = (F, r) => Object.fromEntries(F.map((k,i) => [k, r[i]]));
 let LS_P = null, ADV_P = null;
-function loadLS(){ return LS_P ||= api("/api/league-stats").then(j => { LS = { sk: j.skaters.map(r => toObj(SK_F, r)), go: j.goalies.map(r => toObj(GO_F, r)) }; return LS; }).catch(e => { LS = { error: e.message }; LS_P = null; return LS; }); }
+function loadLS(){ return LS_P ||= api("/api/league?view=stats").then(j => { LS = { sk: j.skaters.map(r => toObj(SK_F, r)), go: j.goalies.map(r => toObj(GO_F, r)) }; return LS; }).catch(e => { LS = { error: e.message }; LS_P = null; return LS; }); }
 function loadADV(){ return ADV_P ||= api("/api/season-stats").then(j => (ADV = j)).catch(e => { ADV = { error: e.message }; ADV_P = null; return ADV; }); }
 async function loadStats(){
   const host = $("view-stats");
   if(!LEAD) host.innerHTML = `<div class="card loading">Loading league stats…</div>`;
   if(LEAD && Date.now() - statsAt < 10*60*1000){ renderStats(); }
   else {
-    try { LEAD = await api("/api/leaders"); statsAt = Date.now(); renderStats(); }
+    try { LEAD = await api("/api/league?view=leaders"); statsAt = Date.now(); renderStats(); }
     catch(e){ if(!LEAD){ host.innerHTML = `<div class="card empty-card">${esc(e.message)}</div>`; return; } }
   }
   loadLS().then(() => { if(view === "stats") renderStats(); });
