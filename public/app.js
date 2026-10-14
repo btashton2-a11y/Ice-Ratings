@@ -12,6 +12,7 @@ const open = new Set();
 let lastUpdated = null, pollTimer = null;
 let view = "scores", PLAYER = null, playerTab = "profile";
 let CONTRACTS = null;
+const PREVIEWS = new Map();  // game id -> { data } | { error } from /api/preview
 
 const STARTED = ["LIVE", "CRIT", "OFF", "FINAL"];
 const started = st => STARTED.includes(st);
@@ -88,15 +89,21 @@ function gameChip(s){
   const sc = [s.t[0].sc, s.t[1].sc], has = started(s.st);
   const win = has && done(s.st) ? (sc[0] > sc[1] ? 0 : 1) : -1;
   const status = live(s.st) ? `<span class="live-tag"><i aria-hidden="true"></i>${esc(statusText(s))}</span>` : `<span>${esc(statusText(s))}</span>`;
-  return `<button type="button" class="gchip${has ? "" : " future"}" data-g="${s.id}" aria-current="${s.id === current}" ${has ? "" : 'aria-disabled="true"'}>
-    <span class="row${win === 1 ? " lost" : ""}"><span>${esc(s.t[0].ab)}</span><span class="sc">${has ? sc[0] ?? 0 : ""}</span></span>
-    <span class="row${win === 0 ? " lost" : ""}"><span>${esc(s.t[1].ab)}</span><span class="sc">${has ? sc[1] ?? 0 : ""}</span></span>
-    <span class="foot">${status}${best ? `<span>${esc(best.name.split(". ").pop())} <span class="chip ${band(best.rating)}">${fmt(best.rating)}</span></span>` : (has && !g ? "<span>Loading…</span>" : "")}</span>
+  const tm = i => `<span class="tm"><span>${esc(s.t[i].ab)}</span><span class="tnm">${esc(s.t[i].nm)}</span></span>`;
+  const right = best ? `<span>${esc(best.name.split(". ").pop())} <span class="chip ${band(best.rating)}">${fmt(best.rating)}</span></span>`
+    : has && !g ? "<span>Loading…</span>" : !has && s.st !== "PPD" ? "<span>Preview</span>" : "";
+  return `<button type="button" class="gchip${has ? "" : " future"}" data-g="${s.id}" aria-current="${s.id === current}">
+    <span class="row${win === 1 ? " lost" : ""}">${tm(0)}<span class="sc">${has ? sc[0] ?? 0 : ""}</span></span>
+    <span class="row${win === 0 ? " lost" : ""}">${tm(1)}<span class="sc">${has ? sc[1] ?? 0 : ""}</span></span>
+    <span class="foot">${status}${right}</span>
   </button>`;
 }
 function renderStrip(){
   $("date-h").textContent = dayName(viewDate);
-  $("strip").innerHTML = SCHED.games.length ? SCHED.games.map(gameChip).join("") : `<div class="muted" style="padding:8px 2px">No NHL games on this date.</div>`;
+  const n = SCHED.games.length, strip = $("strip");
+  // Fewer games get bigger cards: 1-2 extra large, 3-4 large, 5-8 medium, more than that compact
+  strip.className = `strip n${Math.min(n, 9)} ${n <= 2 ? "xl" : n <= 4 ? "lg" : n <= 8 ? "md" : "sm"}${n > 4 ? " many" : ""}`;
+  strip.innerHTML = n ? SCHED.games.map(gameChip).join("") : `<div class="muted" style="padding:8px 2px">No NHL games on this date.</div>`;
   $("next-day").disabled = viewDate >= shiftDate(SCHED.today, 1);
   $("today-btn").hidden = viewDate === SCHED.today;
   const anyLive = SCHED.games.some(g => live(g.st));
@@ -106,6 +113,7 @@ function renderBest(){
   const all = [];
   dayGames().forEach(g => (RATED[g.id] || []).forEach(p => { if(p.rating != null) all.push({ ...p, g }); }));
   $("best").hidden = !all.length;
+  document.querySelector(".scores-grid").classList.toggle("solo", !all.length);
   if(!all.length) return;
   all.sort((a,b) => b.rating - a.rating || b.raw - a.raw);
   const nLive = dayGames().filter(g => live(g.st)).length;
@@ -127,12 +135,11 @@ function renderBest(){
 function renderGame(){
   const host = $("game");
   const g = GAMES.get(current);
+  const sch = (SCHED?.games || []).find(s => s.id === current);
+  if(sch && !started(sch.st)){ host.innerHTML = pregameNotice() + previewCard(sch); return; }
   if(!g || !RATED[g.id]){
     if(current){ host.innerHTML = `<div class="card loading">Loading game…</div>`; return; }
-    const upcoming = (SCHED?.games || []).filter(s => !started(s.st) && s.st !== "PPD" && s.start).sort((a,b) => a.start.localeCompare(b.start));
-    host.innerHTML = upcoming.length && !(SCHED.games || []).some(s => started(s.st))
-      ? `<div class="card empty-card pre">No games have started yet. First puck drop is at <b>${localTime(upcoming[0].start)}</b>, and ratings appear as soon as it begins. <button type="button" class="pill-btn" id="see-prev">See the previous night</button></div>`
-      : SCHED && !SCHED.games.length ? `<div class="card empty-card">No games on this date. Use the arrows to pick another day.</div>` : "";
+    host.innerHTML = SCHED && !SCHED.games.length ? `<div class="card empty-card">No games on this date. Use the arrows to pick another day.</div>` : "";
     return;
   }
   const R = RATED[g.id];
@@ -163,6 +170,95 @@ function renderGame(){
     <div class="panel" role="tabpanel">${gameTab === "ratings" ? ratingsPanel(g, R, fin) : gameTab === "stats" ? statsPanel(g) : gameTab === "map" ? mapPanel() : goalsPanel(g)}</div>
   </article>`;
   if(gameTab === "map") drawMap();
+}
+
+// ---------- Pregame preview ----------
+function pregameNotice(){
+  const games = SCHED?.games || [];
+  if(games.some(s => started(s.st))) return "";
+  const upcoming = games.filter(s => s.st !== "PPD" && s.start).sort((a,b) => a.start.localeCompare(b.start));
+  if(!upcoming.length) return "";
+  const prev = viewDate <= SCHED.today ? `<button type="button" class="pill-btn" id="see-prev">See the previous night</button>` : "";
+  return `<div class="card notice"><p>No games have started yet. First puck drop is at ${esc(localTime(upcoming[0].start))}, and ratings appear as soon as it begins.</p>${prev}</div>`;
+}
+async function loadPreview(id){
+  if(PREVIEWS.has(id)) return;
+  PREVIEWS.set(id, { loading:true });
+  try { PREVIEWS.set(id, { data: await api(`/api/preview?id=${id}`) }); }
+  catch(e){ PREVIEWS.set(id, { error: e.message || String(e) }); }
+  if(current === id && view === "scores") renderGame();
+}
+const nth = n => { if(n == null) return ""; const v = n % 100; return n + (v >= 11 && v <= 13 ? "th" : ["th","st","nd","rd"][n % 10] || "th"); };
+const pct1 = v => v == null ? "–" : (v*100).toFixed(1) + "%";
+const svp = v => v == null ? "–" : v.toFixed(3).replace(/^0/, "");
+const CAT = { points:"Points", goals:"Goals", assists:"Assists", plusMinus:"Plus/minus", shots:"Shots" };
+function previewCard(s){
+  const P = PREVIEWS.get(s.id);
+  if(!P) loadPreview(s.id);
+  const [A, H] = s.t, d = P?.data, T = d?.teams || [];
+  const when = s.st === "PPD" ? "Postponed" : s.start ? localTime(s.start) : "TBD";
+  const sub = s.st === "PRE" ? "Pregame" : s.start ? new Date(s.start).toLocaleDateString([], { weekday:"long", month:"short", day:"numeric" }) : "";
+  const team = (i, cls) => `<div class="team ${cls}"><span class="abbr">${esc(s.t[i].ab)}</span><span class="nm">${esc(T[i]?.nm || s.t[i].nm)}</span>${T[i]?.record ? `<span class="rec">${esc(T[i].record)}${T[i].streak ? ` · ${esc(streakTxt(T[i].streak))}` : ""}</span>` : ""}</div>`;
+  const head = `<div class="board">
+      <div class="meta"><span>Preview</span><span>${esc([d?.venue, d?.city].filter(Boolean).join(", "))}</span></div>
+      <div class="score">${team(0, "away")}<div class="when"><div class="t">${esc(when)}</div><div class="s">${esc(sub)}</div></div>${team(1, "home")}</div>
+      ${d?.tv?.length ? `<div class="tv">Watch on ${esc(d.tv.join(", "))}</div>` : ""}
+    </div>`;
+  if(!P || P.loading) return `<article class="card game pv">${head}<div class="pv-sec muted">Loading the preview…</div></article>`;
+  if(P.error) return `<article class="card game pv">${head}<div class="pv-sec muted">${esc(P.error)}</div></article>`;
+  return `<article class="card game pv">${head}
+    ${formSec(T)}${goalieSec(T)}${teamStatsSec(T)}${hotSec(d)}${seriesSec(d, T)}
+  </article>`;
+}
+const streakTxt = st => { const m = /^([A-Z]+)(\d+)$/.exec(st); if(!m) return st; const n = +m[2];
+  if(m[1] === "W") return n > 1 ? `won ${n} straight` : "won last game";
+  if(m[1] === "L") return n > 1 ? `lost ${n} straight` : "lost last game";
+  return n > 1 ? `${n} straight OT losses` : "lost last game in OT"; };
+function formSec(T){
+  if(!T.some(t => t.past?.length)) return "";
+  return `<section class="pv-sec"><h3>Last 5 games</h3>${T.map((t,i) => `<div class="form-row" style="--team:var(--${i ? "home" : "away"})">
+    <span class="ab">${esc(t.ab)}</span>
+    <span class="pills">${t.past.map(r => `<span class="fx ${r.r}" title="${r.r === "W" ? "Win" : r.r === "L" ? "Loss" : "Overtime loss"} vs ${esc(r.opp)}">${r.r === "OTL" ? "OT" : r.r}</span>`).join("")}</span>
+    <span class="sum"><b>${esc(t.l5 || "")}</b>${t.past.length ? ` · last: ${t.past[t.past.length-1].r === "W" ? "beat" : "lost to"} ${esc(t.past[t.past.length-1].opp)}` : ""}</span>
+  </div>`).join("")}<div class="pv-note">Oldest to newest, left to right. OT means an overtime or shootout loss.</div></section>`;
+}
+function goalieSec(T){
+  if(!T.some(t => t.proj)) return "";
+  const card = (t, i) => { const g = t.proj; if(!g) return `<div class="gcard" style="--team:var(--${i ? "home" : "away"})"><span class="muted">No goalie stats yet.</span></div>`;
+    const alt = t.goalies.filter(x => x.id !== g.id)[0];
+    return `<div class="gcard" style="--team:var(--${i ? "home" : "away"})">
+      <div class="top-line"><button type="button" class="gname" data-player="${g.id}">${esc(g.name)}${g.num != null ? ` <span class="muted">#${g.num}</span>` : ""}</button><span class="gtm">${esc(t.ab)}</span></div>
+      <div class="nums"><div><b>${esc(g.rec || "–")}</b><span>Record</span></div><div><b>${svp(g.svp)}</b><span>Save %</span></div><div><b>${g.gaa == null ? "–" : g.gaa.toFixed(2)}</b><span>GAA</span></div><div><b>${g.gp}</b><span>Games</span></div></div>
+      <div class="why">${esc(g.why)}.</div>
+      ${alt ? `<div class="alt">Other option: ${esc(alt.name)} (${esc(alt.rec)}, ${svp(alt.svp)})</div>` : ""}
+    </div>`; };
+  return `<section class="pv-sec"><h3>Projected starting goalies</h3><div class="pv-two">${T.map(card).join("")}</div>
+    <div class="pv-note">A projection from starts and rest. Teams confirm their starter close to puck drop.</div></section>`;
+}
+function teamStatsSec(T){
+  const [a, h] = T.map(t => t.stats);
+  if(!a || !h) return "";
+  const rows = [
+    ["Goals per game", a.gf, h.gf, 2, false, a.gfRk, h.gfRk], ["Goals against per game", a.ga, h.ga, 2, true, a.gaRk, h.gaRk],
+    ["Power play", a.pp*100, h.pp*100, 1, false, a.ppRk, h.ppRk, "%"], ["Penalty kill", a.pk*100, h.pk*100, 1, false, a.pkRk, h.pkRk, "%"],
+    ["Faceoffs won", a.fo*100, h.fo*100, 1, false, a.foRk, h.foRk, "%"]
+  ].filter(r => r[1] != null && r[2] != null && !isNaN(r[1]) && !isNaN(r[2]));
+  return `<section class="pv-sec"><h3>Season stats</h3><div class="tstats"><div class="ts-key"><span><i style="background:var(--away)"></i>${esc(T[0].ab)}</span><span>${esc(T[1].ab)}<i style="background:var(--home)"></i></span></div>` +
+    rows.map(([n, x, y, dp, low, rx, ry, u = ""]) => { const tot = x + y || 1, ax = low ? x < y : x > y, hy = low ? y < x : y > x;
+      return `<div class="ts-row"><span class="v${ax ? " lead" : ""}">${x.toFixed(dp)}${u}</span><span class="nm">${n}<br><span class="rk">${nth(rx)} · ${nth(ry)} in NHL</span></span><span class="v r${hy ? " lead" : ""}">${y.toFixed(dp)}${u}</span>
+        <span class="bar" aria-hidden="true"><i class="a" style="width:${(x/tot*100).toFixed(1)}%"></i><i class="h" style="width:${(y/tot*100).toFixed(1)}%"></i></span></div>`; }).join("") + `</div></section>`;
+}
+function hotSec(d){
+  const L = (d.leaders || []).filter(l => l.a || l.h);
+  if(!L.length) return "";
+  const pl = (x, cls) => x ? `<button type="button" class="pl ${cls}" data-player="${x.id}">${cls === "h" ? `<span class="n">${esc(x.name)}</span><span class="val">${x.val}</span>` : `<span class="val">${x.val}</span><span class="n">${esc(x.name)}</span>`}</button>` : "<span></span>";
+  return `<section class="pv-sec"><h3>Hot players${d.leadersCtx === "last_5_games" ? " · last 5 games" : ""}</h3><div class="hot">${L.map(l => `<div class="hot-row">${pl(l.a, "a")}<span class="cat">${esc(CAT[l.cat] || l.cat)}</span>${pl(l.h, "h")}</div>`).join("")}</div></section>`;
+}
+function seriesSec(d, T){
+  const S = d.series || [];
+  const w = d.seriesWins;
+  const head = S.length && w ? `${w[0] === w[1] ? `Series tied ${w[0]}–${w[1]}` : `${esc(T[w[0] > w[1] ? 0 : 1].ab)} lead ${Math.max(...w)}–${Math.min(...w)}`}` : "First meeting this season";
+  return `<section class="pv-sec"><h3>Season series</h3><div class="series"><div><b>${head}</b></div>${S.map(m => `<div class="mtg"><span>${esc(tinyDay(m.d))}</span><span class="res">${esc(m.a)} ${m.as ?? ""} – ${m.hs ?? ""} ${esc(m.h)}${m.end && m.end !== "REG" ? ` (${esc(m.end)})` : ""}</span></div>`).join("")}</div></section>`;
 }
 
 function ratingsPanel(g, R, fin){
@@ -469,13 +565,17 @@ async function loadGames(ids){
 function pickTopGame(){
   rateAll(); let best = null;
   dayGames().forEach(g => (RATED[g.id] || []).forEach(p => { if(p.rating != null && (!best || p.rating > best.r)) best = { r:p.rating, g:g.id }; }));
-  return best?.g ?? dayGames()[0]?.id ?? null;
+  if(best) return best.g;
+  if(dayGames()[0]) return dayGames()[0].id;
+  // Nothing has started: open the preview of the next game
+  const up = (SCHED?.games || []).filter(s => !started(s.st) && s.st !== "PPD").sort((a,b) => (a.start || "").localeCompare(b.start || ""));
+  return up[0]?.id ?? null;
 }
 function renderScores(){ rateAll(); renderStrip(); renderBest(); renderGame(); }
 async function loadDay(date, { select = null } = {}){
   viewDate = date;
   SCHED = await api(`/api/schedule?date=${date}`);
-  open.clear(); current = select; bestAll = false;
+  open.clear(); current = select; bestAll = false; PREVIEWS.clear();
   lastUpdated = new Date();
   renderScores();
   const need = SCHED.games.filter(g => started(g.st) && (!GAMES.has(g.id) || !done(GAMES.get(g.id).st))).map(g => g.id);
@@ -517,7 +617,7 @@ document.addEventListener("click", e => {
   if(t.closest("[data-back]")){ if(history.state && history.state.view !== "scores" && history.length > 1) history.back(); else { setView("scores"); renderScores(); } return; }
   const nv = t.closest(".nav button"); if(nv){ setView(nv.dataset.view); if(nv.dataset.view === "scores" && SCHED) renderScores(); return; }
   if(t.closest("#home-btn")){ if(SCHED && viewDate === SCHED.today){ setView("scores"); renderScores(); } else if(SCHED) goDay(SCHED.today); return; }
-  const gc = t.closest(".gchip"); if(gc){ if(gc.classList.contains("future")) return; current = +gc.dataset.g; open.clear(); renderStrip(); renderGame(); return; }
+  const gc = t.closest(".gchip"); if(gc){ current = +gc.dataset.g; open.clear(); renderStrip(); renderGame(); return; }
   const bp = t.closest("#best-list button"); if(bp){ current = +bp.dataset.g; open.clear(); open.add(+bp.dataset.p); gameTab = "ratings"; renderStrip(); renderGame(); scrollToRow(+bp.dataset.p); return; }
   if(t.closest("#best-more")){ bestAll = !bestAll; renderBest(); return; }
   const gt = t.closest("[data-gtab]"); if(gt){ gameTab = gt.dataset.gtab; renderGame(); return; }
