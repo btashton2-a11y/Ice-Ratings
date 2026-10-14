@@ -57,6 +57,9 @@ const COUNTRIES = { CAN:"Canada", USA:"United States", SWE:"Sweden", FIN:"Finlan
 const LOGO = "https://assets.nhle.com/logos/nhl/svg/";
 const logo = (ab, cls = "") => ab ? `<picture class="tlogo${cls ? " " + cls : ""}"><source srcset="${LOGO}${esc(ab)}_dark.svg" media="(prefers-color-scheme: dark)"><img src="${LOGO}${esc(ab)}_light.svg" alt="" loading="lazy" onerror="this.parentNode.remove()"></picture>` : "";
 
+// Player headshots: the NHL keeps each player's most recent photo at /latest/<id>.png (initials show until it loads, or if it fails)
+const mug = (id, cls = "") => id ? `<img class="mug${cls ? " " + cls : ""}" src="https://assets.nhle.com/mugs/nhl/latest/${+id}.png" alt="" loading="lazy" onerror="this.remove()">` : "";
+
 // ---------- Ratings for the day ----------
 function dayGames(){ return (SCHED?.games || []).map(s => GAMES.get(s.id)).filter(Boolean); }
 function rateAll(){
@@ -84,7 +87,7 @@ function rateAll(){
 
 // ---------- Shared bits ----------
 function chip(r, isStar){ return `<span class="chip ${band(r)}" aria-label="Rating ${fmt(r)}">${fmt(r)}${isStar ? '<span class="star-mark" aria-hidden="true">★</span>' : ""}</span>`; }
-function avatar(pl, size, isStar){ return `<span class="av${size ? " " + size : ""} side${pl.side}"><span class="face" aria-hidden="true">${initials(pl.name)}</span>${chip(pl.rating, isStar)}</span>`; }
+function avatar(pl, size, isStar){ return `<span class="av${size ? " " + size : ""} side${pl.side}"><span class="face" aria-hidden="true">${initials(pl.name)}${mug(pl.id)}</span>${chip(pl.rating, isStar)}</span>`; }
 
 // ---------- Scores: date bar + strip ----------
 function gameChip(s){
@@ -127,7 +130,7 @@ function renderBest(){
   $("best-list").innerHTML = all.slice(0, n).map((p,i) => {
     const opp = p.g.t[1-p.side].ab;
     return `<li><button type="button" data-g="${p.g.id}" data-p="${p.id}">
-      <span class="rk">${i+1}</span>
+      <span class="rk">${i+1}</span><span class="av sm side${p.side}"><span class="face" aria-hidden="true">${initials(p.name)}${mug(p.id)}</span></span>
       <span class="who"><b>${esc(p.name)}</b><span>${logo(p.g.t[p.side].ab)}${esc(p.g.t[p.side].ab)} ${p.side === 0 ? "at" : "vs"} ${esc(opp)} · ${esc(p.line)}</span></span>
       ${chip(p.rating)}</button></li>`;
   }).join("");
@@ -231,7 +234,7 @@ function goalieSec(T){
   const card = (t, i) => { const g = t.proj; if(!g) return `<div class="gcard" style="--team:var(--${i ? "home" : "away"})"><span class="muted">No goalie stats yet.</span></div>`;
     const alt = t.goalies.filter(x => x.id !== g.id)[0];
     return `<div class="gcard" style="--team:var(--${i ? "home" : "away"})">
-      <div class="top-line"><button type="button" class="gname" data-player="${g.id}">${esc(g.name)}${g.num != null ? ` <span class="muted">#${g.num}</span>` : ""}</button><span class="gtm">${logo(t.ab)}${esc(t.ab)}</span></div>
+      <div class="top-line"><button type="button" class="gname" data-player="${g.id}"><span class="av md"><span class="face" aria-hidden="true">${initials(g.name)}${mug(g.id)}</span></span>${esc(g.name)}${g.num != null ? ` <span class="muted">#${g.num}</span>` : ""}</button><span class="gtm">${logo(t.ab)}${esc(t.ab)}</span></div>
       <div class="nums"><div><b>${esc(g.rec || "–")}</b><span>Record</span></div><div><b>${svp(g.svp)}</b><span>Save %</span></div><div><b>${g.gaa == null ? "–" : g.gaa.toFixed(2)}</b><span>GAA</span></div><div><b>${g.gp}</b><span>Games</span></div></div>
       <div class="why">${esc(g.why)}.</div>
       ${alt ? `<div class="alt">Other option: ${esc(alt.name)} (${esc(alt.rec)}, ${svp(alt.svp)})</div>` : ""}
@@ -255,7 +258,7 @@ function teamStatsSec(T){
 function hotSec(d){
   const L = (d.leaders || []).filter(l => l.a || l.h);
   if(!L.length) return "";
-  const pl = (x, cls) => x ? `<button type="button" class="pl ${cls}" data-player="${x.id}">${cls === "h" ? `<span class="n">${esc(x.name)}</span><span class="val">${x.val}</span>` : `<span class="val">${x.val}</span><span class="n">${esc(x.name)}</span>`}</button>` : "<span></span>";
+  const pl = (x, cls) => x ? `<button type="button" class="pl ${cls}" data-player="${x.id}">${cls === "h" ? `<span class="n">${esc(x.name)}</span><span class="av sm"><span class="face" aria-hidden="true">${initials(x.name)}${mug(x.id)}</span></span><span class="val">${x.val}</span>` : `<span class="val">${x.val}</span><span class="av sm"><span class="face" aria-hidden="true">${initials(x.name)}${mug(x.id)}</span></span><span class="n">${esc(x.name)}</span>`}</button>` : "<span></span>";
   return `<section class="pv-sec"><h3>Hot players${d.leadersCtx === "last_5_games" ? " · last 5 games" : ""}</h3><div class="hot">${L.map(l => `<div class="hot-row">${pl(l.a, "a")}<span class="cat">${esc(CAT[l.cat] || l.cat)}</span>${pl(l.h, "h")}</div>`).join("")}</div></section>`;
 }
 function seriesSec(d, T){
@@ -452,7 +455,7 @@ function renderPlayer(){
   <article class="card">
     <div class="p-hero">
       <div class="p-head">
-        <span class="av xl" style="--team:var(--accent)"><span class="face" aria-hidden="true">${initials(name)}</span>${avg != null ? chip(avg) : ""}</span>
+        <span class="av xl" style="--team:var(--accent)"><span class="face" aria-hidden="true">${initials(name)}${mug(p.id)}</span>${avg != null ? chip(avg) : ""}</span>
         <div><h1>${esc(name)}</h1><div class="sub">${p.active ? logo(p.team) : ""}${esc(sub)}</div></div>
       </div>
       ${p.active || curTot.gp ? `<div class="p-quick" aria-label="${seasonLabel(p.season)} season">${quick.map(([v,l]) => `<div><b>${v}</b><span>${l}</span></div>`).join("")}<div><b style="font-size:14px;font-family:var(--f-body);color:var(--muted)">${seasonLabel(p.season)}</b><span>Season</span></div></div>` : ""}
@@ -519,7 +522,7 @@ const input = $("search"), results = $("results");
 function closeSearch(){ results.hidden = true; input.setAttribute("aria-expanded", "false"); input.removeAttribute("aria-activedescendant"); hl = -1; }
 function renderResults(list, q){
   hl = -1;
-  results.innerHTML = list.length ? list.map((p,i) => `<li><button type="button" role="option" data-player="${p.id}" id="opt-${i}"><span>${esc(p.name)}</span><span class="meta">${p.team ? logo(p.team) : ""}${esc([p.pos, p.team].filter(Boolean).join(" · "))}${p.active ? "" : " · Retired"}</span></button></li>`).join("")
+  results.innerHTML = list.length ? list.map((p,i) => `<li><button type="button" role="option" data-player="${p.id}" id="opt-${i}"><span class="rname"><span class="av sm"><span class="face" aria-hidden="true">${initials(p.name)}${mug(p.id)}</span></span>${esc(p.name)}</span><span class="meta">${p.team ? logo(p.team) : ""}${esc([p.pos, p.team].filter(Boolean).join(" · "))}${p.active ? "" : " · Retired"}</span></button></li>`).join("")
     : `<li class="empty">No players match “${esc(q)}”.</li>`;
   results.hidden = false; input.setAttribute("aria-expanded", "true");
 }

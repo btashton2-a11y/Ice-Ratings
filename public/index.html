@@ -190,7 +190,7 @@ main{padding-block:20px 56px}
 .best h2{font-size:16px;margin-bottom:2px}
 .best .sub{font-size:13px;color:var(--muted);margin-bottom:8px}
 .best ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
-.best li button{all:unset;box-sizing:border-box;width:100%;display:grid;grid-template-columns:18px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 6px;border-radius:10px;cursor:pointer}
+.best li button{all:unset;box-sizing:border-box;width:100%;display:grid;grid-template-columns:18px 30px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 6px;border-radius:10px;cursor:pointer}
 .best li button:hover{background:var(--hover)}
 .best .rk{font-family:var(--f-mono);font-size:12px;color:var(--muted);text-align:right}
 .best .who{min-width:0;display:flex;flex-direction:column;line-height:1.3}
@@ -210,6 +210,14 @@ main{padding-block:20px 56px}
 .av.lg{width:64px;height:64px} .av.lg .face{font-size:21px}
 .av.lg .chip{font-size:13px;padding:1px 6px;right:-10px;bottom:-6px}
 .av.xl{width:84px;height:84px} .av.xl .face{font-size:28px;border-width:3px}
+.av .face{position:relative;overflow:hidden}
+.av .face .mug{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center 15%;background:var(--soft)}
+.av.sm{width:30px;height:30px} .av.sm .face{font-size:11px;border-width:1.5px}
+.av.md{width:40px;height:40px}
+.results .rname{display:inline-flex;align-items:center;gap:10px;min-width:0}
+.results button{align-items:center}
+.gcard .gname{display:inline-flex;align-items:center;gap:10px}
+.hot-row .pl{align-items:center}
 .side0{--team:var(--away)} .side1{--team:var(--home)}
 
 /* Game card */
