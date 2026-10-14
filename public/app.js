@@ -53,6 +53,10 @@ const initials = n => { const parts = String(n).replace(/\./g, " ").trim().split
 const clock = s => { const p = Math.floor(s/1200) + 1, r = s % 1200; return `${p > 3 ? "OT" : "P" + p} ${String(Math.floor(r/60)).padStart(2,"0")}:${String(r%60).padStart(2,"0")}`; };
 const COUNTRIES = { CAN:"Canada", USA:"United States", SWE:"Sweden", FIN:"Finland", RUS:"Russia", CZE:"Czechia", SVK:"Slovakia", CHE:"Switzerland", DEU:"Germany", LVA:"Latvia", DNK:"Denmark", NOR:"Norway", AUT:"Austria", FRA:"France", SVN:"Slovenia", BLR:"Belarus", UKR:"Ukraine", KAZ:"Kazakhstan", AUS:"Australia", GBR:"United Kingdom", NLD:"Netherlands", ITA:"Italy", POL:"Poland", JPN:"Japan", KOR:"South Korea", BRA:"Brazil", HRV:"Croatia", LTU:"Lithuania", EST:"Estonia", HUN:"Hungary", BEL:"Belgium", ESP:"Spain", UZB:"Uzbekistan", JAM:"Jamaica", NGA:"Nigeria", ZAF:"South Africa", VEN:"Venezuela", TWN:"Taiwan", CHN:"China", IRL:"Ireland", SCO:"Scotland", ROU:"Romania", SRB:"Serbia", BGR:"Bulgaria", GHA:"Ghana", KEN:"Kenya", MEX:"Mexico", ARG:"Argentina" };
 
+// Team logos from the NHL's own image server (light and dark versions)
+const LOGO = "https://assets.nhle.com/logos/nhl/svg/";
+const logo = (ab, cls = "") => ab ? `<picture class="tlogo${cls ? " " + cls : ""}"><source srcset="${LOGO}${esc(ab)}_dark.svg" media="(prefers-color-scheme: dark)"><img src="${LOGO}${esc(ab)}_light.svg" alt="" loading="lazy" onerror="this.parentNode.remove()"></picture>` : "";
+
 // ---------- Ratings for the day ----------
 function dayGames(){ return (SCHED?.games || []).map(s => GAMES.get(s.id)).filter(Boolean); }
 function rateAll(){
@@ -89,7 +93,7 @@ function gameChip(s){
   const sc = [s.t[0].sc, s.t[1].sc], has = started(s.st);
   const win = has && done(s.st) ? (sc[0] > sc[1] ? 0 : 1) : -1;
   const status = live(s.st) ? `<span class="live-tag"><i aria-hidden="true"></i>${esc(statusText(s))}</span>` : `<span>${esc(statusText(s))}</span>`;
-  const tm = i => `<span class="tm"><span>${esc(s.t[i].ab)}</span><span class="tnm">${esc(s.t[i].nm)}</span></span>`;
+  const tm = i => `<span class="tm">${logo(s.t[i].ab)}<span>${esc(s.t[i].ab)}</span><span class="tnm">${esc(s.t[i].nm)}</span></span>`;
   const right = best ? `<span>${esc(best.name.split(". ").pop())} <span class="chip ${band(best.rating)}">${fmt(best.rating)}</span></span>`
     : has && !g ? "<span>Loading…</span>" : !has && s.st !== "PPD" ? "<span>Preview</span>" : "";
   return `<button type="button" class="gchip${has ? "" : " future"}" data-g="${s.id}" aria-current="${s.id === current}">
@@ -124,7 +128,7 @@ function renderBest(){
     const opp = p.g.t[1-p.side].ab;
     return `<li><button type="button" data-g="${p.g.id}" data-p="${p.id}">
       <span class="rk">${i+1}</span>
-      <span class="who"><b>${esc(p.name)}</b><span>${esc(p.g.t[p.side].ab)} ${p.side === 0 ? "at" : "vs"} ${esc(opp)} · ${esc(p.line)}</span></span>
+      <span class="who"><b>${esc(p.name)}</b><span>${logo(p.g.t[p.side].ab)}${esc(p.g.t[p.side].ab)} ${p.side === 0 ? "at" : "vs"} ${esc(opp)} · ${esc(p.line)}</span></span>
       ${chip(p.rating)}</button></li>`;
   }).join("");
   $("best-more").hidden = all.length <= 5;
@@ -156,9 +160,9 @@ function renderGame(){
     <div class="board">
       <div class="meta"><span>${esc(shortDay(g.d))}</span><span>${esc(g.v)}</span></div>
       <div class="score">
-        <div class="team away"><span class="abbr">${esc(A.ab)}</span><span class="nm">${esc(A.nm)}</span></div>
+        <div class="team away">${logo(A.ab, "big")}<span class="abbr">${esc(A.ab)}</span><span class="nm">${esc(A.nm)}</span></div>
         <div><div class="final"><span class="${win === 1 ? "lose" : ""}">${A.sc}</span><span class="dash">–</span><span class="${win === 0 ? "lose" : ""}">${H.sc}</span></div><div class="status">${status}</div></div>
-        <div class="team home"><span class="abbr">${esc(H.ab)}</span><span class="nm">${esc(H.nm)}</span></div>
+        <div class="team home">${logo(H.ab, "big")}<span class="abbr">${esc(H.ab)}</span><span class="nm">${esc(H.nm)}</span></div>
       </div>
       <div class="xg-line">Expected goals <b class="mono">${xg(0).toFixed(2)}</b> – <b class="mono">${xg(1).toFixed(2)}</b></div>
       <div class="periods"><table aria-label="Goals by period">
@@ -198,7 +202,7 @@ function previewCard(s){
   const [A, H] = s.t, d = P?.data, T = d?.teams || [];
   const when = s.st === "PPD" ? "Postponed" : s.start ? localTime(s.start) : "TBD";
   const sub = s.st === "PRE" ? "Pregame" : s.start ? new Date(s.start).toLocaleDateString([], { weekday:"long", month:"short", day:"numeric" }) : "";
-  const team = (i, cls) => `<div class="team ${cls}"><span class="abbr">${esc(s.t[i].ab)}</span><span class="nm">${esc(T[i]?.nm || s.t[i].nm)}</span>${T[i]?.record ? `<span class="rec">${esc(T[i].record)}${T[i].streak ? ` · ${esc(streakTxt(T[i].streak))}` : ""}</span>` : ""}</div>`;
+  const team = (i, cls) => `<div class="team ${cls}">${logo(s.t[i].ab, "big")}<span class="abbr">${esc(s.t[i].ab)}</span><span class="nm">${esc(T[i]?.nm || s.t[i].nm)}</span>${T[i]?.record ? `<span class="rec">${esc(T[i].record)}${T[i].streak ? ` · ${esc(streakTxt(T[i].streak))}` : ""}</span>` : ""}</div>`;
   const head = `<div class="board">
       <div class="meta"><span>Preview</span><span>${esc([d?.venue, d?.city].filter(Boolean).join(", "))}</span></div>
       <div class="score">${team(0, "away")}<div class="when"><div class="t">${esc(when)}</div><div class="s">${esc(sub)}</div></div>${team(1, "home")}</div>
@@ -217,7 +221,7 @@ const streakTxt = st => { const m = /^([A-Z]+)(\d+)$/.exec(st); if(!m) return st
 function formSec(T){
   if(!T.some(t => t.past?.length)) return "";
   return `<section class="pv-sec"><h3>Last 5 games</h3>${T.map((t,i) => `<div class="form-row" style="--team:var(--${i ? "home" : "away"})">
-    <span class="ab">${esc(t.ab)}</span>
+    <span class="ab">${logo(t.ab)}${esc(t.ab)}</span>
     <span class="pills">${t.past.map(r => `<span class="fx ${r.r}" title="${r.r === "W" ? "Win" : r.r === "L" ? "Loss" : "Overtime loss"} vs ${esc(r.opp)}">${r.r === "OTL" ? "OT" : r.r}</span>`).join("")}</span>
     <span class="sum"><b>${esc(t.l5 || "")}</b>${t.past.length ? ` · last: ${t.past[t.past.length-1].r === "W" ? "beat" : "lost to"} ${esc(t.past[t.past.length-1].opp)}` : ""}</span>
   </div>`).join("")}<div class="pv-note">Oldest to newest, left to right. OT means an overtime or shootout loss.</div></section>`;
@@ -227,7 +231,7 @@ function goalieSec(T){
   const card = (t, i) => { const g = t.proj; if(!g) return `<div class="gcard" style="--team:var(--${i ? "home" : "away"})"><span class="muted">No goalie stats yet.</span></div>`;
     const alt = t.goalies.filter(x => x.id !== g.id)[0];
     return `<div class="gcard" style="--team:var(--${i ? "home" : "away"})">
-      <div class="top-line"><button type="button" class="gname" data-player="${g.id}">${esc(g.name)}${g.num != null ? ` <span class="muted">#${g.num}</span>` : ""}</button><span class="gtm">${esc(t.ab)}</span></div>
+      <div class="top-line"><button type="button" class="gname" data-player="${g.id}">${esc(g.name)}${g.num != null ? ` <span class="muted">#${g.num}</span>` : ""}</button><span class="gtm">${logo(t.ab)}${esc(t.ab)}</span></div>
       <div class="nums"><div><b>${esc(g.rec || "–")}</b><span>Record</span></div><div><b>${svp(g.svp)}</b><span>Save %</span></div><div><b>${g.gaa == null ? "–" : g.gaa.toFixed(2)}</b><span>GAA</span></div><div><b>${g.gp}</b><span>Games</span></div></div>
       <div class="why">${esc(g.why)}.</div>
       ${alt ? `<div class="alt">Other option: ${esc(alt.name)} (${esc(alt.rec)}, ${svp(alt.svp)})</div>` : ""}
@@ -273,7 +277,7 @@ function ratingsPanel(g, R, fin){
     const groups = [["Forwards", mine.filter(p => !p.goalie && p.pos !== "D")], ["Defense", mine.filter(p => p.pos === "D")], ["Goalies", mine.filter(p => p.goalie && !p.dnp)]];
     const rated = mine.filter(p => p.rating != null), avg = rated.length ? rated.reduce((a,p) => a + p.rating, 0) / rated.length : null;
     return `<section class="side${side}" aria-label="${esc(g.t[side].nm)} lineup">
-      <div class="lineup-head"><h3>${esc(g.t[side].nm)}</h3><span class="avg">${avg == null ? "" : `Average <b class="mono">${avg.toFixed(2)}</b>`}</span></div>
+      <div class="lineup-head"><h3>${logo(g.t[side].ab)}${esc(g.t[side].nm)}</h3><span class="avg">${avg == null ? "" : `Average <b class="mono">${avg.toFixed(2)}</b>`}</span></div>
       ${groups.map(([lbl, arr]) => `<div class="group-label label">${lbl}</div>` + [...arr].sort((a,b) => (b.rating ?? -1) - (a.rating ?? -1)).map(p => playerRow(p, bestId)).join("")).join("")}
     </section>`; }).join("")}</div>`;
 }
@@ -449,7 +453,7 @@ function renderPlayer(){
     <div class="p-hero">
       <div class="p-head">
         <span class="av xl" style="--team:var(--accent)"><span class="face" aria-hidden="true">${initials(name)}</span>${avg != null ? chip(avg) : ""}</span>
-        <div><h1>${esc(name)}</h1><div class="sub">${esc(sub)}</div></div>
+        <div><h1>${esc(name)}</h1><div class="sub">${p.active ? logo(p.team) : ""}${esc(sub)}</div></div>
       </div>
       ${p.active || curTot.gp ? `<div class="p-quick" aria-label="${seasonLabel(p.season)} season">${quick.map(([v,l]) => `<div><b>${v}</b><span>${l}</span></div>`).join("")}<div><b style="font-size:14px;font-family:var(--f-body);color:var(--muted)">${seasonLabel(p.season)}</b><span>Season</span></div></div>` : ""}
       <div class="tabs" role="tablist">${tabs.map(([k,l]) => `<button type="button" role="tab" data-ptab="${k}" aria-selected="${playerTab === k}">${l}</button>`).join("")}</div>
@@ -491,7 +495,7 @@ function gamesPanel(p, avg){
     const cells = p.goalie
       ? `<td class="mono">${g.sa != null ? `${g.sa - (g.ga||0)}/${g.sa}` : "–"}</td><td class="mono hide-sm">${g.sa ? ((g.sa - g.ga)/g.sa).toFixed(3).replace(/^0/,"") : "–"}</td>`
       : `<td class="mono">${g.g}</td><td class="mono">${g.a}</td><td class="mono hide-sm">${g.g + g.a}</td>`;
-    return `<tr class="click" data-gamelink="${g.id}" data-date="${g.date}" tabindex="0"><td class="l">${tinyDay(g.date)}</td><td class="l">${g.home ? "vs" : "at"} ${esc(g.opp)}</td><td class="l">${res}</td>${cells}<td class="mono hide-sm">${esc(g.toi)}</td><td>${chip(g.rating)}</td></tr>`;
+    return `<tr class="click" data-gamelink="${g.id}" data-date="${g.date}" tabindex="0"><td class="l">${tinyDay(g.date)}</td><td class="l"><span class="opp">${g.home ? "vs" : "at"} ${logo(g.opp)}${esc(g.opp)}</span></td><td class="l">${res}</td>${cells}<td class="mono hide-sm">${esc(g.toi)}</td><td>${chip(g.rating)}</td></tr>`;
   }).join("");
   return sum + `<div class="tbl-wrap"><table class="data"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>`;
 }
@@ -515,7 +519,7 @@ const input = $("search"), results = $("results");
 function closeSearch(){ results.hidden = true; input.setAttribute("aria-expanded", "false"); input.removeAttribute("aria-activedescendant"); hl = -1; }
 function renderResults(list, q){
   hl = -1;
-  results.innerHTML = list.length ? list.map((p,i) => `<li><button type="button" role="option" data-player="${p.id}" id="opt-${i}"><span>${esc(p.name)}</span><span class="meta">${esc([p.pos, p.team].filter(Boolean).join(" · "))}${p.active ? "" : " · Retired"}</span></button></li>`).join("")
+  results.innerHTML = list.length ? list.map((p,i) => `<li><button type="button" role="option" data-player="${p.id}" id="opt-${i}"><span>${esc(p.name)}</span><span class="meta">${p.team ? logo(p.team) : ""}${esc([p.pos, p.team].filter(Boolean).join(" · "))}${p.active ? "" : " · Retired"}</span></button></li>`).join("")
     : `<li class="empty">No players match “${esc(q)}”.</li>`;
   results.hidden = false; input.setAttribute("aria-expanded", "true");
 }
