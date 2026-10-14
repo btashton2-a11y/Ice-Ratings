@@ -144,3 +144,13 @@ export function gameRaws(g){
   });
   return out;
 }
+
+// One player's rating in one game (null if he didn't play enough to be rated)
+export function ratePlayer(g, playerId, cal, scale = SCALE_DEFAULT){
+  const i = g.p.findIndex(r => r[1] === playerId);
+  if(i < 0) return null;
+  const p = scoreGame(g, DEFAULTS)[i];
+  if(p.raw == null || (!p.goalie && p.toi < MIN_TOI_SK)) return { ...p, rating:null };
+  const grp = grpOf(p.pos), c = calibrate(p.raw, cal[grp], scale);
+  return { ...p, grp, rating:c.rating, pct:c.pct };
+}
