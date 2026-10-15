@@ -381,6 +381,21 @@ table.lead-table .rk{width:34px;color:var(--muted)}
 .h2h-p .tlogo{margin-right:0} .h2h-p .tlogo img{width:1.2em;height:1.2em}
 .h2h-p .chip{font-size:11.5px;padding:0 5px;min-width:0}
 @media (max-width:520px){ .h2h-top{margin-left:0} .ln-nums{grid-template-columns:repeat(2,minmax(0,1fr))} }
+/* Team roster */
+.team-tabs{padding:0 20px;margin-top:6px}
+.ros-sum{display:flex;flex-wrap:wrap;gap:8px 28px;margin-bottom:16px}
+.ros-sum div{display:flex;flex-direction:column}
+.ros-sum b{font-family:var(--f-display);font-size:22px;line-height:1.1}
+.ros-sum span{font-size:12.5px;color:var(--muted)}
+.roster-tbl{margin-bottom:18px}
+.roster-tbl th{white-space:nowrap}
+.roster-tbl thead th{background:var(--soft);font-size:12.5px}
+.roster-tbl thead th.l:nth-child(2){font-family:var(--f-display);font-size:15px;color:var(--ink)}
+.roster-tbl td.num{font-family:var(--f-display);color:var(--muted);width:34px}
+.roster-tbl .pcell{display:inline-flex;align-items:center;gap:10px}
+.roster-tbl .pcell b{font-weight:600;white-space:nowrap}
+.roster-tbl td{font-variant-numeric:tabular-nums}
+.roster-tbl .cap{font-family:var(--f-display);color:var(--accent)}
 /* Players tab */
 .pl-add{position:relative;flex:0 1 320px;min-width:200px}
 .pl-add input{width:100%;font:inherit;font-size:14px;padding:8px 14px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
