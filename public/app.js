@@ -185,7 +185,7 @@ async function pooled(items, n, fn){
   return out;
 }
 function sideVisibility(){
-  const show = ["myteams", "best", "wbest", "totw", "mbest"].some(id => !$(id).hidden);
+  const show = ["myteams", "following", "best", "wbest", "totw", "mbest"].some(id => !$(id).hidden);
   document.querySelector(".scores-grid").classList.toggle("solo", !show);
 }
 function loadWeek(){ loadPeriod("week"); loadPeriod("month"); }
@@ -369,7 +369,7 @@ function ratingsPanel(g, R, fin){
     <button type="button" class="star" data-open="${p.id}">${avatar(p, "lg", false)}
       <span class="who"><span class="rank">${fin ? ["Player of the game","2nd star","3rd star"][i] : ["Leading","2nd","3rd"][i]}</span>
       <b>${esc(p.name)}</b><span>${esc(g.t[p.side].ab)} · Top ${topPct(p.pct)} of ${GRP_NAME[p.grp]} games</span></span></button>`).join("")}</div>` : "";
-  return stars + `<div class="lineups">${[0,1].map(side => {
+  return stars + fanVoteSec(g, R) + `<div class="lineups">${[0,1].map(side => {
     const mine = R.filter(p => p.side === side);
     const groups = [["Forwards", mine.filter(p => !p.goalie && p.pos !== "D")], ["Defense", mine.filter(p => p.pos === "D")], ["Goalies", mine.filter(p => p.goalie && !p.dnp)]];
     const rated = mine.filter(p => p.rating != null), avg = rated.length ? rated.reduce((a,p) => a + p.rating, 0) / rated.length : null;
@@ -554,7 +554,7 @@ function renderPlayer(){
       <div class="p-head">
         <span class="av xl" style="--team:var(--accent)"><span class="face" aria-hidden="true">${initials(name)}${mug(p.id)}</span>${avg != null ? chip(avg) : ""}</span>
         <div><h1>${esc(name)}</h1><div class="sub">${p.active ? logo(p.team) : ""}${esc(sub)}</div></div>
-        <button type="button" class="pill-btn cmp-btn" data-compare="${p.id}">Compare</button>
+        <span class="p-acts"><button type="button" class="pill-btn follow-btn${isFollowing(p.id) ? " on" : ""}" data-follow aria-pressed="${isFollowing(p.id)}">${isFollowing(p.id) ? "★ Following" : "☆ Follow"}</button><button type="button" class="pill-btn cmp-btn" data-compare="${p.id}">Compare</button></span>
       </div>
       ${p.active || curTot.gp ? `<div class="p-quick" aria-label="${seasonLabel(p.season)} season">${quick.map(([v,l]) => `<div><b>${v}</b><span>${l}</span></div>`).join("")}<div><b style="font-size:14px;font-family:var(--f-body);color:var(--muted)">${seasonLabel(p.season)}</b><span>Season</span></div></div>` : ""}
       <div class="tabs" role="tablist">${tabs.map(([k,l]) => `<button type="button" role="tab" data-ptab="${k}" aria-selected="${playerTab === k}">${l}</button>`).join("")}</div>
@@ -648,13 +648,14 @@ document.addEventListener("click", e => { if(!e.target.closest(".search")) close
 // ---------- Views ----------
 function setView(v, { push = true, id = null } = {}){
   view = v;
-  ["scores","player","about","standings","stats","teams"].forEach(k => $("view-" + k).hidden = k !== v);
+  ["scores","player","about","standings","stats","teams","account"].forEach(k => $("view-" + k).hidden = k !== v);
   document.querySelectorAll(".nav button").forEach(b => b.setAttribute("aria-current", b.dataset.view === v ? "page" : "false"));
   if(push) try { history.pushState({ view: v, id }, ""); } catch(e){}
   if(v === "about") renderAbout();
   if(v === "standings") loadStandings();
   if(v === "stats") loadStats();
   if(v === "teams") loadTeams();
+  if(v === "account") renderAccount();
 }
 window.addEventListener("popstate", e => {
   const s = e.state || { view: "scores" };
@@ -985,6 +986,7 @@ const isFav = ab => FAVS.includes(ab);
 function toggleFav(ab){
   FAVS = isFav(ab) ? FAVS.filter(x => x !== ab) : [...FAVS, ab];
   try { localStorage.setItem(FAV_KEY, JSON.stringify(FAVS)); } catch(e){}
+  favRemote(ab, isFav(ab));
 }
 const STAR = `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M12 3.2l2.7 5.6 6.1.8-4.5 4.2 1.1 6-5.4-2.9-5.4 2.9 1.1-6-4.5-4.2 6.1-.8z"/></svg>`;
 const favBtn = (t, cls = "") => `<button type="button" class="fav${isFav(t.ab) ? " on" : ""}${cls}" data-fav="${esc(t.ab)}" aria-pressed="${isFav(t.ab)}" aria-label="${isFav(t.ab) ? "Remove" : "Add"} ${esc(t.name)} ${isFav(t.ab) ? "from" : "to"} favorites" title="${isFav(t.ab) ? "Remove from favorites" : "Add to favorites"}">${STAR}</button>`;
@@ -1516,6 +1518,219 @@ function h2hSec(a, h, curId, after){
   return `<section class="pv-sec">${head}<div class="h2h"><div class="h2h-sum"><b>${esc(sum)}</b></div>${fin.length ? `<ul class="h2h-list">${rows}</ul>` : ""}${next}</div></section>`;
 }
 
+// ---------- Accounts (Supabase: sign-in, synced favorites, followed players, fan votes) ----------
+// The project URL and the public "anon" key are meant to be public; every table is locked down with row-level security.
+const SUPA_URL = "https://fdowqdkjdafwdyutyrpj.supabase.co", SUPA_KEY = "sb_publishable_mCtB8znir-o338baT_MSRA_TAGISd4o";
+let SB = null, USER = null, PROFILE = null, FOLLOWS = [], authMode = "signin", authMsg = "";
+const VOTES = new Map();     // game id -> { tally: [[playerId, n]], mine, at, loading }
+function sbInit(){
+  const btn = $("acct-btn");
+  if(!SUPA_URL || !SUPA_KEY || !window.supabase?.createClient){ btn.hidden = true; return; }
+  try { SB = window.supabase.createClient(SUPA_URL, SUPA_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: "implicit" } }); }
+  catch(e){ btn.hidden = true; return; }
+  btn.hidden = false; renderAcctBtn();
+  SB.auth.onAuthStateChange((ev, session) => {
+    if(ev === "PASSWORD_RECOVERY"){ openAuth("reset"); }
+    const u = session?.user || null;
+    if((u?.id || null) !== (USER?.id || null)){ USER = u; onUserChange(); }
+    else USER = u;
+    renderAcctBtn();
+  });
+}
+const uname = () => PROFILE?.username || USER?.user_metadata?.username || (USER?.email || "").split("@")[0];
+function renderAcctBtn(){
+  const b = $("acct-btn"); if(!SB) return;
+  b.innerHTML = USER ? `<span class="acct-av" aria-hidden="true">${esc((uname()[0] || "?").toUpperCase())}</span><span class="acct-nm">${esc(uname())}</span>` : "Sign in";
+  b.classList.toggle("in", !!USER);
+  b.setAttribute("aria-label", USER ? `Account: ${uname()}` : "Sign in");
+}
+function rerenderForUser(){
+  if(view === "scores" && SCHED){ renderStrip(); renderGame(); renderMyTeams(); renderFollowing(); }
+  else if(view === "teams") renderTeams();
+  else if(view === "player" && PLAYER) renderPlayer();
+  else if(view === "account") renderAccount();
+}
+async function onUserChange(){
+  VOTES.forEach(v => { v.mine = undefined; });
+  if(!USER){ PROFILE = null; FOLLOWS = []; rerenderForUser(); if(view === "account") setView("scores"); return; }
+  const id = USER.id;
+  const [p, f, fo] = await Promise.all([
+    SB.from("profiles").select("username,fav_team,created_at").eq("id", id).maybeSingle(),
+    SB.from("favorites").select("team,pos").order("pos"),
+    SB.from("follows").select("player_id,name,team,created_at").order("created_at")
+  ]);
+  if(USER?.id !== id) return;
+  PROFILE = p.data || null;
+  FOLLOWS = fo.data || [];
+  // favorites: keep anything starred on this device before signing in, then store the combined list on the account
+  const remote = (f.data || []).map(r => r.team), merged = [...remote, ...FAVS.filter(x => !remote.includes(x))];
+  if(merged.length > remote.length) await SB.from("favorites").upsert(merged.map((team, pos) => ({ user_id: id, team, pos })));
+  FAVS = merged; try { localStorage.setItem(FAV_KEY, JSON.stringify(FAVS)); } catch(e){}
+  renderAcctBtn(); rerenderForUser();
+}
+function favRemote(ab, on){
+  if(!SB || !USER) return;
+  (on ? SB.from("favorites").upsert({ user_id: USER.id, team: ab, pos: FAVS.indexOf(ab) }) : SB.from("favorites").delete().eq("user_id", USER.id).eq("team", ab)).then(() => {});
+}
+const isFollowing = id => FOLLOWS.some(f => f.player_id === id);
+async function toggleFollow(p){
+  if(!USER){ openAuth("signin", "Sign in to follow players. Their latest ratings show up on your Scores page."); return; }
+  if(isFollowing(p.id)){ FOLLOWS = FOLLOWS.filter(f => f.player_id !== p.id); await SB.from("follows").delete().eq("user_id", USER.id).eq("player_id", p.id); }
+  else { const row = { user_id: USER.id, player_id: p.id, name: p.name, team: p.team || "" }; FOLLOWS = [...FOLLOWS, row]; await SB.from("follows").upsert(row); }
+  rerenderForUser();
+}
+
+// ---------- Sign-in window ----------
+function openAuth(mode = "signin", msg = ""){ authMode = mode; authMsg = msg; $("auth-modal").hidden = false; renderAuth(); setTimeout(() => $("auth-modal").querySelector("input")?.focus(), 30); }
+function closeAuth(){ $("auth-modal").hidden = true; }
+function renderAuth(err = "", ok = ""){
+  // keep what was typed when the form redraws (after an error, or switching between sign in and create account)
+  const keep = {}; ["af-user", "af-email", "af-pass"].forEach(id => { const el = document.getElementById(id); if(el) keep[id] = el.value; });
+  const m = authMode, T = { signin: "Sign in", signup: "Create an account", forgot: "Reset your password", reset: "Choose a new password" }[m];
+  const field = (id, label, type, extra = "") => `<label class="af"><span>${label}</span><input id="${id}" type="${type}" ${extra} required></label>`;
+  let body = "";
+  if(m === "signin") body = field("af-email", "Email", "email", 'autocomplete="email"') + field("af-pass", "Password", "password", 'autocomplete="current-password" minlength="8"');
+  if(m === "signup") body = field("af-user", "Username", "text", 'autocomplete="username" minlength="3" maxlength="20" pattern="[A-Za-z0-9_]{3,20}" title="3 to 20 letters, numbers or underscores"') + field("af-email", "Email", "email", 'autocomplete="email"') + field("af-pass", "Password", "password", 'autocomplete="new-password" minlength="8"') + `<p class="muted small">At least 8 characters. Your username is shown on your profile; your email stays private.</p>`;
+  if(m === "forgot") body = field("af-email", "Email", "email", 'autocomplete="email"') + `<p class="muted small">We'll email you a link to set a new password.</p>`;
+  if(m === "reset") body = field("af-pass", "New password", "password", 'autocomplete="new-password" minlength="8"');
+  const foot = m === "signin" ? `<button type="button" class="link-btn" data-authmode="forgot">Forgot password?</button><span>New here? <button type="button" class="link-btn" data-authmode="signup">Create an account</button></span>`
+    : m === "signup" ? `<span>Already have an account? <button type="button" class="link-btn" data-authmode="signin">Sign in</button></span>`
+    : m === "forgot" ? `<button type="button" class="link-btn" data-authmode="signin">Back to sign in</button>` : "";
+  $("auth-body").innerHTML = `<h2 id="auth-h">${T}</h2>${authMsg ? `<p class="auth-note">${esc(authMsg)}</p>` : ""}
+    <form id="auth-form" novalidate>${body}${err ? `<p class="auth-err" role="alert">${esc(err)}</p>` : ""}${ok ? `<p class="auth-ok" role="status">${esc(ok)}</p>` : ""}
+    <button type="submit" class="pill-btn primary auth-go">${{ signin: "Sign in", signup: "Create account", forgot: "Send reset link", reset: "Save password" }[m]}</button></form>
+    <div class="auth-foot">${foot}</div>`;
+  Object.entries(keep).forEach(([id, v]) => { const el = document.getElementById(id); if(el && v) el.value = v; });
+}
+const authErr = e => { const s = String(e?.message || e || ""); return /invalid login/i.test(s) ? "That email and password don't match an account." : /already registered|already been registered/i.test(s) ? "There's already an account with that email. Try signing in."
+  : /database error saving new user|duplicate/i.test(s) ? "That username is taken. Try another." : /rate limit|too many/i.test(s) ? "Too many tries. Wait a few minutes and try again." : /email not confirmed/i.test(s) ? "Confirm your email first: check your inbox for the link." : s || "Something went wrong. Try again."; };
+async function submitAuth(){
+  const v = id => ($(id)?.value || "").trim(), go = $("auth-body").querySelector(".auth-go");
+  const m = authMode; go.disabled = true;
+  try {
+    if(m === "signup"){
+      const u = v("af-user"), e = v("af-email"), p = $("af-pass").value;
+      if(!/^[A-Za-z0-9_]{3,20}$/.test(u)) throw "Usernames are 3 to 20 letters, numbers or underscores.";
+      if(!/^\S+@\S+\.\S+$/.test(e)) throw "Enter a valid email address.";
+      if(p.length < 8) throw "Use at least 8 characters for your password.";
+      const taken = await SB.from("profiles").select("id").ilike("username", u.replace(/_/g, "\\_")).limit(1);
+      if(taken.data?.length) throw "That username is taken. Try another.";
+      const { data, error } = await SB.auth.signUp({ email: e, password: p, options: { data: { username: u }, emailRedirectTo: location.origin } });
+      if(error) throw error;
+      if(!data.session){ authMode = "signin"; renderAuth("", "Account created. Check your email for a link to confirm it, then sign in."); return; }
+      closeAuth(); return;
+    }
+    if(m === "signin"){ const { error } = await SB.auth.signInWithPassword({ email: v("af-email"), password: $("af-pass").value }); if(error) throw error; closeAuth(); return; }
+    if(m === "forgot"){ const { error } = await SB.auth.resetPasswordForEmail(v("af-email"), { redirectTo: location.origin }); if(error) throw error; renderAuth("", "If that email has an account, a reset link is on its way."); return; }
+    if(m === "reset"){ const p = $("af-pass").value; if(p.length < 8) throw "Use at least 8 characters for your password."; const { error } = await SB.auth.updateUser({ password: p }); if(error) throw error; renderAuth("", "Password updated. You're signed in."); setTimeout(closeAuth, 1200); return; }
+  } catch(e){ renderAuth(authErr(e)); }
+  finally { const g = $("auth-body").querySelector(".auth-go"); if(g) g.disabled = false; }
+}
+
+// ---------- Following (Scores side column) ----------
+function latestFor(id){
+  for(const g of dayGames()){ const p = (RATED[g.id] || []).find(x => x.id === id); if(p && p.rating != null) return { live: !done(g.st), rating: p.rating, opp: g.t[1 - p.side].ab, home: p.side === 1, d: g.d, gid: g.id, line: p.line }; }
+  const f = formNow(id, () => { if(view === "scores") renderFollowing(); else if(view === "account") renderAccount(); });
+  if(f === undefined) return undefined;
+  const g = f[0]; return g ? { rating: g.rating, opp: g.opp, home: g.home, d: g.date, gid: g.id } : null;
+}
+function followRow(f, big){
+  const L = latestFor(f.player_id);
+  const when = L ? `${L.live ? `<span class="live-tag"><i aria-hidden="true"></i>Live</span> ` : ""}${L.home ? "vs" : "at"} ${esc(L.opp)} · ${esc(tinyDay(L.d))}` : L === null ? "No rated games yet" : "Loading…";
+  const a = ADV && !ADV.error ? ADV.skaters.find(x => x.id === f.player_id) || ADV.goalies.find(x => x.id === f.player_id) : null;
+  return `<li><button type="button" data-player="${f.player_id}"><span class="av sm"><span class="face" aria-hidden="true">${initials(f.name)}${mug(f.player_id)}</span></span>
+    <span class="who"><b>${esc(f.name)}</b><span>${f.team ? logo(f.team) + esc(f.team) + " · " : ""}${when}${big && a?.rating != null ? ` · season ${a.rating.toFixed(2)}` : ""}</span></span>${L ? chip(L.rating) : ""}</button></li>`;
+}
+function renderFollowing(){
+  const box = $("following");
+  if(!USER || !FOLLOWS.length || view !== "scores"){ box.hidden = true; sideVisibility(); return; }
+  box.hidden = false; sideVisibility();
+  $("following-list").innerHTML = FOLLOWS.map(f => followRow(f)).join("");
+}
+
+// ---------- Fan votes (finished games) ----------
+async function loadVotes(gid, force){
+  if(!SB) return;
+  const V = VOTES.get(gid);
+  if(V && (V.loading || (!force && Date.now() - V.at < 60000 && (V.mine !== undefined || !USER)))) return;
+  VOTES.set(gid, { ...(V || {}), loading: true, at: Date.now() });
+  const [t, m] = await Promise.all([SB.rpc("vote_tally", { gid }), USER ? SB.from("votes").select("player_id").eq("game_id", gid).eq("user_id", USER.id).maybeSingle() : Promise.resolve({ data: null })]);
+  VOTES.set(gid, { tally: (t.data || []).map(r => [r.player_id, Number(r.votes)]), mine: m.data?.player_id ?? null, at: Date.now(), loading: false });
+  if(view === "scores" && current === gid && gameTab === "ratings") renderGame();
+}
+async function castVote(gid, pid){
+  if(!USER){ openAuth("signin", "Sign in to vote for player of the game."); return; }
+  const g = GAMES.get(gid), p = (RATED[gid] || []).find(x => x.id === pid);
+  if(!g || !p || !done(g.st)) return;
+  const V = VOTES.get(gid) || { tally: [] };
+  // update the count on screen right away, then save
+  const tally = new Map(V.tally || []); if(V.mine != null) tally.set(V.mine, Math.max(0, (tally.get(V.mine) || 1) - 1)); tally.set(pid, (tally.get(pid) || 0) + 1);
+  VOTES.set(gid, { tally: [...tally].filter(x => x[1] > 0).sort((a, b) => b[1] - a[1]), mine: pid, at: Date.now() });
+  renderGame();
+  const { error } = await SB.from("votes").upsert({ game_id: gid, user_id: USER.id, player_id: pid, player_name: p.name, label: `${g.t[0].ab} ${g.t[0].sc}–${g.t[1].sc} ${g.t[1].ab}`, game_date: g.d }, { onConflict: "game_id,user_id" });
+  loadVotes(gid, true);
+  if(error) console.warn(error);
+}
+function fanVoteSec(g, R){
+  if(!SB || !done(g.st)) return "";
+  const V = VOTES.get(g.id); if(!V || (!V.loading && Date.now() - V.at > 60000)) loadVotes(g.id);
+  const rated = R.filter(p => p.rating != null).sort((a, b) => b.rating - a.rating);
+  if(!rated.length) return "";
+  const tally = V?.tally || [], total = tally.reduce((a, x) => a + x[1], 0), mine = V?.mine ?? null;
+  const byId = new Map(R.map(p => [p.id, p]));
+  const pick = (p) => `<button type="button" class="fv-pick${mine === p.id ? " on" : ""}" data-vote="${p.id}" aria-pressed="${mine === p.id}"><span class="av sm side${p.side}"><span class="face" aria-hidden="true">${initials(p.name)}${mug(p.id)}</span></span><span>${esc(p.name)}</span><small>${esc(g.t[p.side].ab)}</small></button>`;
+  const quick = rated.slice(0, 6), rest = rated.slice(6).sort((a, b) => a.name.localeCompare(b.name));
+  const results = total ? `<div class="fv-res">${tally.slice(0, 5).map(([id, n]) => { const p = byId.get(id); if(!p) return ""; const pc = Math.round(n / total * 100);
+      return `<div class="fv-row${mine === id ? " me" : ""}"><span class="fv-nm">${esc(p.name)} <small>${esc(g.t[p.side].ab)}</small></span><span class="fv-bar"><i style="width:${pc}%;background:var(--${p.side ? "home" : "away"})"></i></span><span class="fv-pc mono">${pc}%</span></div>`; }).join("")}
+      <p class="muted small">${total} vote${total === 1 ? "" : "s"}${mine != null ? " · your pick is highlighted" : ""}. Our rating's player of the game: <b>${esc(rated[0].name)}</b>.</p></div>` : `<p class="muted small">No votes yet. Be the first.</p>`;
+  return `<section class="fanvote"><div class="fv-head"><h3>Fans' player of the game</h3>${USER ? "" : `<button type="button" class="link-btn" data-authopen>Sign in to vote</button>`}</div>
+    <div class="fv-picks">${quick.map(pick).join("")}${rest.length ? `<label class="fv-other"><span class="sr-only">Someone else</span><select data-voteother><option value="">Someone else…</option>${rest.map(p => `<option value="${p.id}"${mine === p.id ? " selected" : ""}>${esc(p.name)} (${esc(g.t[p.side].ab)})</option>`).join("")}</select></label>` : ""}</div>
+    ${results}</section>`;
+}
+
+// ---------- Profile page ----------
+const TEAM_NAMES = () => (TEAMS?.teams || []).map(t => [t.ab, t.name]).sort((a, b) => a[1].localeCompare(b[1]));
+let MYVOTES = null;
+async function loadMyVotes(){
+  if(!USER) return;
+  const { data } = await SB.from("votes").select("game_id,player_id,player_name,label,game_date,created_at").eq("user_id", USER.id).order("created_at", { ascending: false }).limit(25);
+  MYVOTES = data || [];
+  if(view === "account") renderAccount();
+}
+function openAccount(){ if(!USER){ openAuth(); return; } setView("account"); MYVOTES = null; loadMyVotes(); getTeams().then(() => { if(view === "account") renderAccount(); }); loadADV().then(() => { if(view === "account") renderAccount(); }); }
+function renderAccount(){
+  const host = $("view-account");
+  if(!USER){ host.innerHTML = `<div class="card empty-card">Sign in to see your profile.</div>`; return; }
+  const since = new Date(PROFILE?.created_at || USER.created_at).toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  const fav = PROFILE?.fav_team, favName = TEAMS?.teams?.find(t => t.ab === fav)?.name || fav;
+  const teams = FAVS.map(ab => { const t = TEAMS?.teams?.find(x => x.ab === ab); return `<li><button type="button" data-team="${esc(ab)}">${logo(ab, "mt")}<span class="who"><b>${esc(t?.name || ab)}</b><span>${t ? `${t.w}-${t.l}-${t.otl} · ${t.pts} pts` : ""}</span></span></button><button type="button" class="fav on inline" data-fav="${esc(ab)}" aria-label="Remove ${esc(t?.name || ab)} from favorites">${STAR}</button></li>`; }).join("");
+  const votes = MYVOTES == null ? `<p class="muted small">Loading…</p>` : !MYVOTES.length ? `<p class="muted small">No votes yet. Open a finished game and pick your player of the game.</p>`
+    : `<ul class="acct-votes">${MYVOTES.map(v => `<li><button type="button" data-gamelink="${v.game_id}" data-date="${v.game_date || ""}"><span class="sd">${v.game_date ? esc(tinyDay(v.game_date)) : ""}</span><span class="lb">${esc(v.label)}</span><span class="pk">${esc(v.player_name)}</span></button></li>`).join("")}</ul>`;
+  host.innerHTML = `<article class="card acct">
+    <div class="acct-hero"><span class="acct-big" aria-hidden="true">${esc((uname()[0] || "?").toUpperCase())}</span>
+      <div><h1>${esc(uname())}</h1><div class="sub">${fav ? `${logo(fav)}${esc(favName)} fan · ` : ""}Member since ${esc(since)}</div></div>
+      <button type="button" class="pill-btn" data-signout>Sign out</button></div>
+    <section class="pv-sec"><h3 class="pstat-h">Profile</h3>
+      <form id="prof-form" class="prof-form">
+        <label class="af"><span>Username</span><input id="pf-user" value="${esc(PROFILE?.username || "")}" minlength="3" maxlength="20" pattern="[A-Za-z0-9_]{3,20}" required></label>
+        <label class="af"><span>Favorite team</span><select id="pf-team"><option value="">None</option>${TEAM_NAMES().map(([ab, nm]) => `<option value="${ab}"${ab === fav ? " selected" : ""}>${esc(nm)}</option>`).join("")}</select></label>
+        <button type="submit" class="pill-btn primary">Save</button><span id="pf-msg" class="muted small" role="status"></span>
+      </form>
+      <p class="muted small">Signed in as ${esc(USER.email || "")}. <button type="button" class="link-btn" data-authmode-open="reset">Change password</button></p></section>
+    <section class="pv-sec"><h3 class="pstat-h">Favorite teams</h3>${FAVS.length ? `<ul class="acct-list">${teams}</ul>` : `<p class="muted small">Star teams on the Teams tab and they'll show up here and first on your Scores page, on every device you sign in on.</p>`}</section>
+    <section class="pv-sec"><h3 class="pstat-h">Following</h3>${FOLLOWS.length ? `<ul class="acct-list best-like">${FOLLOWS.map(f => followRow(f, true).replace("</button></li>", `</button><button type="button" class="link-btn unf" data-unfollow="${f.player_id}">Unfollow</button></li>`)).join("")}</ul>` : `<p class="muted small">Open any player and tap Follow to track his ratings here and on your Scores page.</p>`}</section>
+    <section class="pv-sec"><h3 class="pstat-h">Your fan votes</h3>${votes}</section>
+  </article>`;
+}
+async function saveProfile(){
+  const u = $("pf-user").value.trim(), t = $("pf-team").value || null, msg = $("pf-msg");
+  if(!/^[A-Za-z0-9_]{3,20}$/.test(u)){ msg.textContent = "Usernames are 3 to 20 letters, numbers or underscores."; return; }
+  msg.textContent = "Saving…";
+  const { error } = await SB.from("profiles").update({ username: u, fav_team: t }).eq("id", USER.id);
+  if(error){ msg.textContent = /duplicate|unique/i.test(error.message) ? "That username is taken." : "Couldn't save. Try again."; return; }
+  PROFILE = { ...(PROFILE || {}), username: u, fav_team: t }; renderAcctBtn(); renderAccount(); $("pf-msg").textContent = "Saved.";
+}
+
 async function loadGames(ids){
   let k = 0;
   await Promise.all(Array.from({ length: Math.min(6, ids.length) }, async () => {
@@ -1536,7 +1751,7 @@ function pickTopGame(){
   const up = (SCHED?.games || []).filter(s => !started(s.st) && s.st !== "PPD").sort((a,b) => (a.start || "").localeCompare(b.start || ""));
   return up[0]?.id ?? null;
 }
-function renderScores(){ rateAll(); renderStrip(); renderBest(); renderGame(); renderWeekBest(); renderMyTeams(); }
+function renderScores(){ rateAll(); renderStrip(); renderBest(); renderGame(); renderWeekBest(); renderMyTeams(); renderFollowing(); }
 async function loadDay(date, { select = null } = {}){
   viewDate = date;
   SCHED = await api(`/api/schedule?date=${date}`);
@@ -1579,6 +1794,15 @@ function showError(e){ $("game").innerHTML = `<div class="card empty-card">${esc
 // ---------- Events ----------
 document.addEventListener("click", e => {
   const t = e.target;
+  if(t.closest("#acct-btn")){ USER ? openAccount() : openAuth(); return; }
+  if(t.closest("[data-authclose]") || t.id === "auth-modal"){ closeAuth(); return; }
+  const am = t.closest("[data-authmode]"); if(am){ authMode = am.dataset.authmode; authMsg = ""; renderAuth(); $("auth-modal").querySelector("input")?.focus(); return; }
+  const amo = t.closest("[data-authmode-open]"); if(amo){ openAuth(amo.dataset.authmodeOpen); return; }
+  if(t.closest("[data-authopen]")){ openAuth("signin", "Sign in to vote for player of the game."); return; }
+  if(t.closest("[data-signout]")){ SB?.auth.signOut(); return; }
+  if(t.closest("[data-follow]") && PLAYER){ toggleFollow({ id: PLAYER.id, name: `${PLAYER.first} ${PLAYER.last}`, team: PLAYER.team }); return; }
+  const unf = t.closest("[data-unfollow]"); if(unf){ const f = FOLLOWS.find(x => x.player_id === +unf.dataset.unfollow); if(f) toggleFollow({ id: f.player_id, name: f.name, team: f.team }); return; }
+  const vt = t.closest("[data-vote]"); if(vt){ castVote(current, +vt.dataset.vote); return; }
   if(t.closest("[data-shareclose]") || t.id === "share-modal"){ closeShare(); return; }
   const shb = t.closest("[data-share]"); if(shb){ openShare(current, +shb.dataset.share); return; }
   const cmpb = t.closest("[data-compare]"); if(cmpb){ compareWith(+cmpb.dataset.compare); return; }
@@ -1605,7 +1829,7 @@ document.addEventListener("click", e => {
   const gl = t.closest("[data-gamelink]"); if(gl){ openGameFromPlayer(+gl.dataset.gamelink, gl.dataset.date); return; }
   if(t.id === "see-prev"){ goDay(shiftDate(viewDate, -1)); return; }
   const tsort = t.closest("[data-tsort]"); if(tsort){ const k = tsort.dataset.tsort, c = TEAM_COLS.find(x => x[0] === k), d0 = c[2] < 0 ? 1 : -1; teamSort = teamSort.k === k ? { k, d: -teamSort.d } : { k, d: d0 }; renderTeams(); return; }
-  const fv = t.closest("[data-fav]"); if(fv){ toggleFav(fv.dataset.fav); renderTeams(); return; }
+  const fv = t.closest("[data-fav]"); if(fv){ toggleFav(fv.dataset.fav); view === "account" ? renderAccount() : renderTeams(); return; }
   const tl = t.closest("[data-team]"); if(tl){ openTeam(tl.dataset.team); return; }
   if(t.closest("[data-teamsback]")){ teamDetail = null; try { history.pushState({ view:"teams" }, ""); } catch(e){} renderTeams(); window.scrollTo(0, 0); return; }
   const stb = t.closest("[data-stab]"); if(stb){ standTab = stb.dataset.stab; standSort = null; renderStandings(); return; }
@@ -1620,7 +1844,9 @@ document.addEventListener("click", e => {
 });
 document.addEventListener("input", e => { const ci = e.target.closest?.("[data-cmpin]"); if(!ci) return; const i = +ci.dataset.cmpin; cmpQ[i] = ci.value; renderStats();
   const el = document.querySelector(`[data-cmpin="${i}"]`); if(el){ el.focus(); el.setSelectionRange(el.value.length, el.value.length); } });
-document.addEventListener("keydown", e => { if(e.key === "Escape" && !$("share-modal").hidden) closeShare(); });
+document.addEventListener("keydown", e => { if(e.key === "Escape" && !$("share-modal").hidden) closeShare(); if(e.key === "Escape" && !$("auth-modal").hidden) closeAuth(); });
+document.addEventListener("submit", e => { if(e.target.id === "auth-form"){ e.preventDefault(); submitAuth(); } else if(e.target.id === "prof-form"){ e.preventDefault(); saveProfile(); } });
+document.addEventListener("change", e => { const s = e.target.closest?.("[data-voteother]"); if(s && s.value) castVote(current, +s.value); });
 document.addEventListener("keydown", e => { if(e.key === "Enter"){ const gl = e.target.closest?.("[data-gamelink]"); if(gl) openGameFromPlayer(+gl.dataset.gamelink, gl.dataset.date); } });
 function openGameFromPlayer(gameId, date){
   const pid = PLAYER?.id;
@@ -1642,7 +1868,9 @@ document.addEventListener("visibilitychange", () => { if(!document.hidden && SCH
 
 // ---------- Boot ----------
 (async function boot(){
-  try { history.replaceState({ view:"scores" }, "", location.pathname); } catch(e){}   // every visit starts fresh on today's games
+  // keep a sign-in or password-reset link's details in the address until the account library has read them
+  try { history.replaceState({ view:"scores" }, "", location.pathname + (/access_token|error_description|type=recovery/.test(location.hash) ? location.hash : "")); } catch(e){}
+  sbInit();   // every visit starts fresh on today's games
   renderAbout();
   api("/api/baseline").then(b => { BASE = b; renderAbout(); if(SCHED && view === "scores") renderScores(); })
     .catch(() => { $("pool-counts").textContent = " (the season comparison couldn't load, so ratings are graded against the games on screen)"; });

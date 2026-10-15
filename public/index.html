@@ -375,6 +375,74 @@ table.lead-table .rk{width:34px;color:var(--muted)}
 .h2h-p .tlogo{margin-right:0} .h2h-p .tlogo img{width:1.2em;height:1.2em}
 .h2h-p .chip{font-size:11.5px;padding:0 5px;min-width:0}
 @media (max-width:520px){ .h2h-top{margin-left:0} .ln-nums{grid-template-columns:repeat(2,minmax(0,1fr))} }
+/* Accounts */
+.acct-btn{order:5;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;padding:6px 14px;font-weight:600;font-size:14px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.acct-btn:hover{background:var(--hover)}
+.acct-btn.in{padding:4px 12px 4px 4px}
+.acct-av,.acct-big{display:inline-grid;place-items:center;border-radius:50%;background:var(--accent);color:#fff;font-weight:700}
+.acct-av{width:28px;height:28px;font-size:14px}
+.acct-nm{max-width:120px;overflow:hidden;text-overflow:ellipsis}
+@media (max-width:640px){ .acct-btn{order:1;margin-left:auto} .nav{order:2;flex-basis:100%} .acct-nm{display:none} .acct-btn.in{padding:4px} }
+.auth-card{position:relative;max-width:400px;padding:22px 22px 18px}
+.auth-x{position:absolute;top:12px;right:12px}
+.auth-card h2{font-size:20px;margin:0 0 12px}
+.auth-note{background:var(--soft);border-radius:10px;padding:8px 10px;font-size:13.5px;margin:0 0 12px}
+#auth-form,.prof-form{display:flex;flex-direction:column;gap:12px}
+.af{display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:600}
+.af input,.af select{font:inherit;font-weight:400;font-size:15px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--soft);color:var(--ink)}
+.af input:focus,.af select:focus{outline:2px solid var(--accent);outline-offset:0;border-color:transparent}
+.auth-go{align-self:stretch;padding:10px 14px;font-size:15px;font-weight:600}
+.auth-go:disabled{opacity:.6}
+.auth-err{color:var(--r-low);font-size:13.5px;margin:0}
+.auth-ok{color:var(--r-good);font-size:13.5px;margin:0}
+.auth-foot{display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-top:14px;font-size:13.5px;color:var(--muted)}
+.p-acts{margin-left:auto;display:inline-flex;gap:8px}
+.p-head .p-acts .cmp-btn{margin-left:0}
+.follow-btn.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.fl-list{list-style:none;margin:0;padding:0}
+.best.mt .fl-list li button{grid-template-columns:30px minmax(0,1fr) auto}
+.best.mt .fl-list .who > span .tlogo img{width:1.1em;height:1.1em}
+.best.mt .fl-list .chip{color:var(--r-chip-ink)} .best.mt .fl-list .chip.mid{color:var(--r-mid-ink)}
+.fanvote{padding:14px 16px;border:1px solid var(--line);border-radius:14px;margin:0 0 18px}
+.fv-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:10px}
+.fv-head h3{font-size:15px}
+.fv-picks{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.fv-pick{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:999px;padding:4px 12px 4px 4px;font-size:14px;font-weight:500}
+.fv-pick .av.sm{width:26px;height:26px}
+.fv-pick small{color:var(--muted)}
+.fv-pick:hover{background:var(--hover)} .fv-pick:focus-visible{outline:2px solid var(--accent)}
+.fv-pick.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent)}
+.fv-other select{font:inherit;font-size:14px;padding:6px 10px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
+.fv-res{display:flex;flex-direction:column;gap:6px}
+.fv-row{display:grid;grid-template-columns:minmax(0,180px) 1fr 44px;gap:10px;align-items:center;font-size:13.5px}
+.fv-row.me .fv-nm{font-weight:700}
+.fv-nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis} .fv-nm small{color:var(--muted)}
+.fv-bar{height:8px;border-radius:4px;background:var(--soft);overflow:hidden} .fv-bar i{display:block;height:100%}
+.fv-pc{text-align:right}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.acct{padding:0}
+.acct-hero{display:flex;align-items:center;gap:16px;padding:22px 20px 8px;flex-wrap:wrap}
+.acct-big{width:64px;height:64px;font-size:28px}
+.acct-hero h1{font-size:24px;margin:0}
+.acct-hero .sub{color:var(--muted);font-size:14px;display:flex;align-items:center;gap:4px}
+.acct-hero [data-signout]{margin-left:auto}
+.prof-form{flex-direction:row;flex-wrap:wrap;align-items:flex-end}
+.prof-form .af{flex:1 1 200px}
+.acct-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
+.acct-list li{display:flex;align-items:center;gap:8px}
+.acct-list li > button:first-child{all:unset;cursor:pointer;flex:1;display:grid;grid-template-columns:34px minmax(0,1fr) auto;gap:10px;align-items:center;padding:6px;border-radius:10px;min-width:0}
+.acct-list li > button:first-child:hover{background:var(--hover)}
+.acct-list .tlogo.mt img{width:30px;height:30px}
+.acct-list .who{display:flex;flex-direction:column;min-width:0}
+.acct-list .who b{font-weight:600}
+.acct-list .who span{font-size:13px;color:var(--muted);display:inline-flex;align-items:center;gap:.25em;flex-wrap:wrap}
+.acct-list .who .tlogo{margin-right:0} .acct-list .who .tlogo img{width:1.1em;height:1.1em}
+.acct-list .fav.inline{position:static}
+.acct-list .unf{white-space:nowrap}
+.acct-votes{list-style:none;margin:0;padding:0}
+.acct-votes button{all:unset;cursor:pointer;box-sizing:border-box;width:100%;display:grid;grid-template-columns:60px minmax(0,1fr) auto;gap:10px;padding:8px 6px;border-top:1px solid var(--line);font-size:14px}
+.acct-votes button:hover{background:var(--hover)}
+.acct-votes .sd{color:var(--muted)} .acct-votes .pk{font-weight:600}
 /* Teams */
 .tblocks{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;margin-bottom:14px}
 .tblock{all:unset;box-sizing:border-box;display:flex;flex-direction:column;gap:12px;padding:14px 16px;cursor:pointer;background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);transition:transform .12s ease,border-color .12s ease}
@@ -724,6 +792,7 @@ footer{color:var(--muted);font-size:12.5px;padding-block:8px 32px}
       <input id="search" type="search" placeholder="Search players" autocomplete="off" aria-label="Search players" aria-controls="results" aria-expanded="false">
       <ul class="results" id="results" role="listbox" hidden></ul>
     </div>
+    <button type="button" class="acct-btn" id="acct-btn" hidden>Sign in</button>
   </div>
 </header>
 
@@ -742,7 +811,7 @@ footer{color:var(--muted);font-size:12.5px;padding-block:8px 32px}
       <div class="strip" id="strip" aria-label="Games"></div>
       <div class="scores-grid">
         <div id="game"></div>
-        <aside class="side"><section class="card best mt" id="myteams" hidden aria-labelledby="myteams-h"><h2 id="myteams-h">Your teams</h2><ul id="myteams-list"></ul></section><section class="card best" id="best" hidden aria-labelledby="best-h"><h2 id="best-h">Best performances</h2><div class="sub" id="best-sub"></div><ol id="best-list"></ol></section><section class="card best" id="wbest" hidden aria-labelledby="wbest-h"><h2 id="wbest-h">Best of the week</h2><div class="sub" id="wbest-sub"></div><ol id="wbest-list" class="pbest-list"></ol></section><section class="card best" id="totw" hidden aria-labelledby="totw-h"><h2 id="totw-h">Team of the week</h2><div class="sub" id="totw-sub"></div><div id="totw-body" class="totw pbest-list"></div></section><section class="card best" id="mbest" hidden aria-labelledby="mbest-h"><h2 id="mbest-h">Best of the month</h2><div class="sub" id="mbest-sub"></div><ol id="mbest-list" class="pbest-list"></ol></section></aside>
+        <aside class="side"><section class="card best mt" id="myteams" hidden aria-labelledby="myteams-h"><h2 id="myteams-h">Your teams</h2><ul id="myteams-list"></ul></section><section class="card best mt" id="following" hidden aria-labelledby="following-h"><h2 id="following-h">Following</h2><ul id="following-list" class="fl-list"></ul></section><section class="card best" id="best" hidden aria-labelledby="best-h"><h2 id="best-h">Best performances</h2><div class="sub" id="best-sub"></div><ol id="best-list"></ol></section><section class="card best" id="wbest" hidden aria-labelledby="wbest-h"><h2 id="wbest-h">Best of the week</h2><div class="sub" id="wbest-sub"></div><ol id="wbest-list" class="pbest-list"></ol></section><section class="card best" id="totw" hidden aria-labelledby="totw-h"><h2 id="totw-h">Team of the week</h2><div class="sub" id="totw-sub"></div><div id="totw-body" class="totw pbest-list"></div></section><section class="card best" id="mbest" hidden aria-labelledby="mbest-h"><h2 id="mbest-h">Best of the month</h2><div class="sub" id="mbest-sub"></div><ol id="mbest-list" class="pbest-list"></ol></section></aside>
       </div>
     </section>
 
@@ -750,6 +819,7 @@ footer{color:var(--muted);font-size:12.5px;padding-block:8px 32px}
     <section class="view" id="view-standings" hidden></section>
     <section class="view" id="view-stats" hidden></section>
     <section class="view" id="view-teams" hidden></section>
+    <section class="view" id="view-account" hidden></section>
 
     <section class="view" id="view-about" hidden>
       <div class="card about">
@@ -779,7 +849,9 @@ footer{color:var(--muted);font-size:12.5px;padding-block:8px 32px}
     <footer>Data from the NHL's public box scores, play-by-play, shift charts, and player pages. Expected goals for finished games from <a href="https://moneypuck.com" target="_blank" rel="noopener">MoneyPuck.com</a>. Ratings are this site's own model, not official NHL statistics. Not affiliated with the NHL or MoneyPuck.</footer>
   </div>
 </main>
+<div class="modal" id="auth-modal" hidden role="dialog" aria-modal="true" aria-labelledby="auth-h"><div class="modal-card auth-card"><button type="button" class="icon-btn auth-x" data-authclose aria-label="Close">×</button><div id="auth-body"></div></div></div>
 <div class="modal" id="share-modal" hidden role="dialog" aria-modal="true" aria-labelledby="share-h"><div class="modal-card"><div class="modal-head"><h2 id="share-h">Share this performance</h2><button type="button" class="icon-btn" data-shareclose aria-label="Close">×</button></div><div id="share-body"></div></div></div>
+<script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.57.4/dist/umd/supabase.min.js"></script>
 <script type="module" src="./app.js"></script>
 </body>
 </html>
