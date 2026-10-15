@@ -115,8 +115,9 @@ async function roster(req, res){
     shoots: p.shootsCatches || "", in: p.heightInInches ?? null, lb: p.weightInPounds ?? null, born: p.birthDate || null,
     city: nm(p.birthCity), country: p.birthCountry || "" });
   const players = [...(j.forwards || []).map(p => one(p, "F")), ...(j.defensemen || []).map(p => one(p, "D")), ...(j.goalies || []).map(p => one(p, "G"))];
-  res.setHeader("Cache-Control", "public, s-maxage=21600, stale-while-revalidate=86400");
-  res.status(200).json({ ab, players });
+  // Short cache so trades, waiver claims and call-ups show up within the hour
+  res.setHeader("Cache-Control", "public, s-maxage=1800, stale-while-revalidate=600");
+  res.status(200).json({ ab, players, updated: new Date().toISOString() });
 }
 // One team's regular-season schedule and results
 async function team(req, res){
