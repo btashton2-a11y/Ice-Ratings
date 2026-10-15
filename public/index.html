@@ -194,6 +194,30 @@ table.lead-table .rk{width:34px;color:var(--muted)}
 .pstat.top{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
 .pstat.top small{color:var(--accent);font-weight:600}
 .muted a,.small a,.lnote a{color:inherit}
+/* Teams */
+.tlink{cursor:pointer}
+.tlink:hover .full,.tlink:hover .abv{text-decoration:underline}
+.teams-table tr.click td{cursor:pointer}
+.team-hero{display:flex;align-items:center;gap:18px;padding:22px 20px 6px;flex-wrap:wrap}
+.team-hero .tlogo.big img{width:84px;height:84px}
+.team-hero h1{font-size:26px;margin:0}
+.team-hero .sub{color:var(--muted);font-size:14px;margin-top:4px}
+.tsched{list-style:none;margin:0;padding:0}
+.tsched li button{all:unset;box-sizing:border-box;width:100%;display:grid;grid-template-columns:64px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 6px;border-radius:10px;cursor:pointer;font-size:14px}
+.tsched li button:hover{background:var(--hover)}
+.tsched .sd{color:var(--muted)}
+.tsched .so{display:inline-flex;align-items:center;gap:.3em}
+.tsched .so .tlogo{margin-right:0}
+.tsched .sr{font-variant-numeric:tabular-nums}
+.tsched .win{color:var(--r-good)} .tsched .loss{color:var(--r-low)}
+.tplay-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px}
+.tplayers{list-style:none;margin:0;padding:0}
+.tplayers li button{all:unset;box-sizing:border-box;width:100%;display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:10px;align-items:center;padding:6px;border-radius:10px;cursor:pointer}
+.tplayers li button:hover{background:var(--hover)}
+.tplayers .who{display:flex;flex-direction:column;min-width:0}
+.tplayers .who b{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tplayers .who span{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tplayers .val{font-weight:700;font-variant-numeric:tabular-nums}
 
 /* Team logos */
 .tlogo{display:inline-flex;flex:none;vertical-align:middle;margin-right:.35em}
@@ -482,6 +506,7 @@ footer{color:var(--muted);font-size:12.5px;padding-block:8px 32px}
     <nav class="nav" aria-label="Main">
       <button type="button" data-view="scores" aria-current="page">Scores</button>
       <button type="button" data-view="standings">Standings</button>
+      <button type="button" data-view="teams">Teams</button>
       <button type="button" data-view="stats">Stats</button>
       <button type="button" data-view="about"><span class="hide-sm">How it works</span><span class="show-sm">About</span></button>
     </nav>
@@ -515,6 +540,7 @@ footer{color:var(--muted);font-size:12.5px;padding-block:8px 32px}
     <section class="view" id="view-player" hidden></section>
     <section class="view" id="view-standings" hidden></section>
     <section class="view" id="view-stats" hidden></section>
+    <section class="view" id="view-teams" hidden></section>
 
     <section class="view" id="view-about" hidden>
       <div class="card about">
