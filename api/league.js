@@ -1,4 +1,4 @@
-// GET /api/league?view=standings | leaders | stats | teams | team&ab=COL
+// GET /api/league?view=standings | leaders | stats | teams | team&ab=COL | shotmap&ab=COL
 //   standings: every team's record with division, conference, league and wild-card order
 //   leaders:   the NHL's official top 10s for skaters and goalies
 //   stats:     this season's full stat lines for every skater and goalie ("See all" lists, player Stats tabs)
@@ -76,6 +76,25 @@ async function teams(req, res){
   res.setHeader("Cache-Control", "public, s-maxage=600, stale-while-revalidate=3600");
   res.status(200).json({ season, teams: out });
 }
+// One team's shot map: where it shoots from and where it allows shots from, per game, next to the league average
+async function shotmap(req, res){
+  const ab = String(req.query.ab || "").toUpperCase();
+  if(!/^[A-Z]{3}$/.test(ab)) return res.status(400).json({ error: "Pass ab=COL (a team abbreviation)." });
+  const proto = req.headers["x-forwarded-proto"] || "https", base = `${proto}://${req.headers.host}`;
+  const r = await fetch(`${base}/api/mp-season?maps=1`); if(!r.ok) throw new Error(`mp-season ${r.status}`);
+  const j = await r.json(), M = j.maps || {}, me = M[ab];
+  // MoneyPuck writes a few teams differently
+  const MP = { TBL: "T.B", NJD: "N.J", LAK: "L.A", SJS: "S.J" };
+  const key = me ? ab : MP[ab];
+  const T = M[key];
+  if(!T) { res.setHeader("Cache-Control", "public, s-maxage=600"); return res.status(200).json({ ab, gp: 0, cols: j.cols, rows: j.rows, none: true }); }
+  const N = j.cols * j.rows, lg = { f: new Array(N).fill(0), fx: new Array(N).fill(0) }; let gp = 0;
+  for(const t of Object.values(M)){ gp += t.gp; for(let i = 0; i < N; i++){ lg.f[i] += t.f[i]; lg.fx[i] += t.fx[i]; } }
+  // league average per team-game (shots for and against are the same pool league-wide)
+  const per = arr => arr.map(v => gp ? Math.round(v / gp * 1000) / 1000 : 0);
+  res.setHeader("Cache-Control", "public, s-maxage=1800, stale-while-revalidate=7200");
+  res.status(200).json({ ab, source: "MoneyPuck.com", updated: j.updated, cols: j.cols, rows: j.rows, gp: T.gp, f: T.f, fx: T.fx, a: T.a, ax: T.ax, lg: { f: per(lg.f), fx: per(lg.fx) } });
+}
 // One team's regular-season schedule and results
 async function team(req, res){
   const ab = String(req.query.ab || "").toUpperCase();
@@ -89,8 +108,8 @@ async function team(req, res){
 
 export default async function handler(req, res){
   const view = String(req.query.view || "");
-  const fn = { standings, leaders, stats, teams, team }[view];
-  if(!fn) return res.status(400).json({ error: "Pass view=standings, leaders, stats, teams or team." });
+  const fn = { standings, leaders, stats, teams, team, shotmap }[view];
+  if(!fn) return res.status(400).json({ error: "Pass view=standings, leaders, stats, teams, team or shotmap." });
   try { await fn(req, res); }
   catch(e){ res.status(502).json({ error: "Couldn't load this from the NHL. Try again in a minute.", detail: String(e) }); }
 }
