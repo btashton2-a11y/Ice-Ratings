@@ -857,7 +857,7 @@ function rankOf(arr, id, key, { min = () => true, asc = false, neg = false } = {
 }
 function statTile(label, value, r, grpLbl){
   const top = r && r.rank <= Math.max(3, Math.round(r.of * 0.05));
-  return `<div class="pstat${top ? " top" : ""}"><b>${value}</b><span>${esc(label)}</span>${r ? `<small>${r.tied ? "T-" : ""}${nth(r.rank)} of ${r.of} ${grpLbl}</small>` : `<small>&nbsp;</small>`}</div>`;
+  return `<div class="pstat${top ? " lead" : ""}"><b>${value}</b><span>${esc(label)}</span>${r ? `<small>${r.tied ? "T-" : ""}${nth(r.rank)} of ${r.of} ${grpLbl}</small>` : `<small>&nbsp;</small>`}</div>`;
 }
 function playerStatsPanel(p){
   if(!LS) return `<div class="muted">Loading season stats…</div>`;
