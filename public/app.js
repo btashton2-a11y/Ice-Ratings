@@ -648,7 +648,7 @@ document.addEventListener("click", e => { if(!e.target.closest(".search")) close
 // ---------- Views ----------
 function setView(v, { push = true, id = null } = {}){
   view = v;
-  ["scores","player","about","standings","stats","teams","account"].forEach(k => $("view-" + k).hidden = k !== v);
+  ["scores","player","about","standings","stats","teams","account","players"].forEach(k => $("view-" + k).hidden = k !== v);
   document.querySelectorAll(".nav button").forEach(b => b.setAttribute("aria-current", b.dataset.view === v ? "page" : "false"));
   if(push) try { history.pushState({ view: v, id }, ""); } catch(e){}
   if(v === "about") renderAbout();
@@ -656,6 +656,7 @@ function setView(v, { push = true, id = null } = {}){
   if(v === "stats") loadStats();
   if(v === "teams") loadTeams();
   if(v === "account") renderAccount();
+  if(v === "players") loadPlayersTab();
 }
 window.addEventListener("popstate", e => {
   const s = e.state || { view: "scores" };
@@ -1521,7 +1522,10 @@ function h2hSec(a, h, curId, after){
 // ---------- Accounts (Supabase: sign-in, synced favorites, followed players, fan votes) ----------
 // The project URL and the public "anon" key are meant to be public; every table is locked down with row-level security.
 const SUPA_URL = "https://fdowqdkjdafwdyutyrpj.supabase.co", SUPA_KEY = "sb_publishable_mCtB8znir-o338baT_MSRA_TAGISd4o";
-let SB = null, USER = null, PROFILE = null, FOLLOWS = [], authMode = "signin", authMsg = "";
+const FOL_KEY = "puck-follows";
+let SB = null, USER = null, PROFILE = null, authMode = "signin", authMsg = "";
+let FOLLOWS = (() => { try { const a = JSON.parse(localStorage.getItem(FOL_KEY) || "[]"); return Array.isArray(a) ? a.filter(f => f && Number.isInteger(f.player_id)) : []; } catch(e){ return []; } })();
+const saveFollowsLocal = () => { try { localStorage.setItem(FOL_KEY, JSON.stringify(FOLLOWS.map(({ player_id, name, team }) => ({ player_id, name, team })))); } catch(e){} };
 const VOTES = new Map();     // game id -> { tally: [[playerId, n]], mine, at, loading }
 function sbInit(){
   const btn = $("acct-btn");
@@ -1549,10 +1553,11 @@ function rerenderForUser(){
   else if(view === "teams") renderTeams();
   else if(view === "player" && PLAYER) renderPlayer();
   else if(view === "account") renderAccount();
+  else if(view === "players") renderPlayersTab();
 }
 async function onUserChange(){
   VOTES.forEach(v => { v.mine = undefined; });
-  if(!USER){ PROFILE = null; FOLLOWS = []; rerenderForUser(); if(view === "account") setView("scores"); return; }
+  if(!USER){ PROFILE = null; rerenderForUser(); if(view === "account") setView("scores"); return; }
   const id = USER.id;
   const [p, f, fo] = await Promise.all([
     SB.from("profiles").select("username,fav_team,created_at").eq("id", id).maybeSingle(),
@@ -1561,7 +1566,10 @@ async function onUserChange(){
   ]);
   if(USER?.id !== id) return;
   PROFILE = p.data || null;
-  FOLLOWS = fo.data || [];
+  // followed players: same idea as favorites, anything followed on this device joins the account
+  const rf = fo.data || [], add = FOLLOWS.filter(f => !rf.some(r => r.player_id === f.player_id)).map(f => ({ user_id: id, player_id: f.player_id, name: f.name || "", team: f.team || "" }));
+  if(add.length) await SB.from("follows").upsert(add);
+  FOLLOWS = [...rf, ...add]; saveFollowsLocal();
   // favorites: keep anything starred on this device before signing in, then store the combined list on the account
   const remote = (f.data || []).map(r => r.team), merged = [...remote, ...FAVS.filter(x => !remote.includes(x))];
   if(merged.length > remote.length) await SB.from("favorites").upsert(merged.map((team, pos) => ({ user_id: id, team, pos })));
@@ -1574,10 +1582,10 @@ function favRemote(ab, on){
 }
 const isFollowing = id => FOLLOWS.some(f => f.player_id === id);
 async function toggleFollow(p){
-  if(!USER){ openAuth("signin", "Sign in to follow players. Their latest ratings show up on your Scores page."); return; }
-  if(isFollowing(p.id)){ FOLLOWS = FOLLOWS.filter(f => f.player_id !== p.id); await SB.from("follows").delete().eq("user_id", USER.id).eq("player_id", p.id); }
-  else { const row = { user_id: USER.id, player_id: p.id, name: p.name, team: p.team || "" }; FOLLOWS = [...FOLLOWS, row]; await SB.from("follows").upsert(row); }
-  rerenderForUser();
+  const on = !isFollowing(p.id);
+  FOLLOWS = on ? [...FOLLOWS, { player_id: p.id, name: p.name, team: p.team || "" }] : FOLLOWS.filter(f => f.player_id !== p.id);
+  saveFollowsLocal(); rerenderForUser();
+  if(SB && USER){ if(on) await SB.from("follows").upsert({ user_id: USER.id, player_id: p.id, name: p.name, team: p.team || "" }); else await SB.from("follows").delete().eq("user_id", USER.id).eq("player_id", p.id); }
 }
 
 // ---------- Sign-in window ----------
@@ -1630,7 +1638,7 @@ async function submitAuth(){
 // ---------- Following (Scores side column) ----------
 function latestFor(id){
   for(const g of dayGames()){ const p = (RATED[g.id] || []).find(x => x.id === id); if(p && p.rating != null) return { live: !done(g.st), rating: p.rating, opp: g.t[1 - p.side].ab, home: p.side === 1, d: g.d, gid: g.id, line: p.line }; }
-  const f = formNow(id, () => { if(view === "scores") renderFollowing(); else if(view === "account") renderAccount(); });
+  const f = formNow(id, () => { if(view === "scores") renderFollowing(); else if(view === "account") renderAccount(); else if(view === "players") renderPlayersTab(); });
   if(f === undefined) return undefined;
   const g = f[0]; return g ? { rating: g.rating, opp: g.opp, home: g.home, d: g.date, gid: g.id } : null;
 }
@@ -1643,7 +1651,7 @@ function followRow(f, big){
 }
 function renderFollowing(){
   const box = $("following");
-  if(!USER || !FOLLOWS.length || view !== "scores"){ box.hidden = true; sideVisibility(); return; }
+  if(!FOLLOWS.length || view !== "scores"){ box.hidden = true; sideVisibility(); return; }
   box.hidden = false; sideVisibility();
   $("following-list").innerHTML = FOLLOWS.map(f => followRow(f)).join("");
 }
@@ -1731,6 +1739,45 @@ async function saveProfile(){
   PROFILE = { ...(PROFILE || {}), username: u, fav_team: t }; renderAcctBtn(); renderAccount(); $("pf-msg").textContent = "Saved.";
 }
 
+
+// ---------- Players tab: the players you follow, as blocks of key stats ----------
+let plQ = "";
+function loadPlayersTab(){
+  renderPlayersTab();
+  Promise.all([loadLS(), loadADV()]).then(() => { if(view === "players") renderPlayersTab(); });
+}
+function playerBlock(f){
+  const L = latestFor(f.player_id);
+  const sk = LS && !LS.error ? LS.sk.find(x => x.id === f.player_id) : null, go = !sk && LS && !LS.error ? LS.go.find(x => x.id === f.player_id) : null;
+  const A = ADV && !ADV.error ? (go ? ADV.goalies : ADV.skaters).find(x => x.id === f.player_id) || ADV.skaters.find(x => x.id === f.player_id) || ADV.goalies.find(x => x.id === f.player_id) : null;
+  const team = sk?.team || go?.team || f.team, pos = sk?.pos || (go ? "G" : "");
+  const S = (v, l, cls = "") => `<span class="tb-s${cls}"><b>${v}</b><small>${l}</small></span>`;
+  const tr = A?.l5 != null && A?.rating != null ? A.l5 - A.rating : null, trCls = tr == null ? "" : tr > .25 ? " hi" : tr < -.25 ? " lo" : "";
+  const stats = go ? [S(go.gp, "Games"), S(`${go.w}-${go.l}-${go.otl}`, "Record"), S(go.svp != null ? f3(go.svp) : "–", "Save %"), S(go.gaa != null ? f2(go.gaa) : "–", "GAA"),
+      S(A?.rating != null ? f2(A.rating) : "–", "Avg rating"), S(A?.l5 != null ? f2(A.l5) : "–", "Last 5 avg", trCls), S(A?.gsax != null ? fSgn(A.gsax) : "–", "Saved above exp."), S(go.so ?? "–", "Shutouts")]
+    : sk ? [S(sk.gp, "Games"), S(sk.g, "Goals"), S(sk.a, "Assists"), S(sk.p, "Points"),
+      S(A?.rating != null ? f2(A.rating) : "–", "Avg rating"), S(A?.l5 != null ? f2(A.l5) : "–", "Last 5 avg", trCls), S(fPm(sk.pm), "+/−"), S(fmtToiPG(sk.toi), "TOI/game")]
+    : [];
+  const last = L ? `${L.live ? `<span class="live-tag"><i aria-hidden="true"></i>Live</span> ` : "Last game "}${L.home ? "vs" : "at"} ${esc(L.opp)} · ${esc(tinyDay(L.d))}` : L === null ? "No rated games yet" : "Loading…";
+  return `<div class="tblock-wrap"><button type="button" class="card tblock pblock" data-player="${f.player_id}">
+      <span class="tb-head"><span class="av md"><span class="face" aria-hidden="true">${initials(f.name)}${mug(f.player_id)}</span></span>
+        <span class="tb-name"><b>${esc(f.name)}</b><span>${team ? logo(team) + esc(team) : ""}${pos ? ` · ${esc(pos)}` : ""}</span><span class="pb-last">${last}${L ? ` ${chip(L.rating)}` : ""}</span></span></span>
+      ${stats.length ? `<span class="tb-stats">${stats.join("")}</span>` : `<span class="muted small">${!LS ? "Loading season stats…" : "No NHL games this season yet."}</span>`}
+    </button><button type="button" class="fav on" data-unfollow="${f.player_id}" aria-label="Unfollow ${esc(f.name)}" title="Unfollow">${STAR}</button></div>`;
+}
+function renderPlayersTab(){
+  const host = $("view-players");
+  const q = plQ.trim().toLowerCase();
+  const pool = LS && !LS.error ? [...LS.sk.map(p => ({ ...p })), ...LS.go.map(p => ({ ...p, pos: "G" }))] : [];
+  const hits = q.length >= 2 ? pool.filter(p => p.name.toLowerCase().includes(q)).sort((a, b) => b.gp - a.gp).slice(0, 8) : [];
+  const add = `<div class="pl-add"><input type="search" id="pl-q" placeholder="Find a player to follow" value="${esc(plQ)}" autocomplete="off" aria-label="Find a player to follow">
+    ${hits.length ? `<ul class="cmp-hits">${hits.map(p => `<li><button type="button" data-plfollow="${p.id}"><span class="av sm"><span class="face" aria-hidden="true">${initials(p.name)}${mug(p.id)}</span></span><span>${esc(p.name)}</span><span class="muted">${esc(p.team)} · ${esc(p.pos)} · ${isFollowing(p.id) ? "Following" : "+ Follow"}</span></button></li>`).join("")}</ul>` : q.length >= 2 && LS ? `<div class="muted small cmp-none">No player this season matches.</div>` : ""}</div>`;
+  host.innerHTML = `<div class="page-head"><h1>Players</h1>${add}</div>
+    ${FOLLOWS.length ? `<div class="tblocks">${FOLLOWS.map(playerBlock).join("")}</div>
+      <p class="muted small">Tap a player for his full profile. Tap the star to unfollow. Last 5 avg is green when he's playing above his season average and red when below.${USER ? "" : " Sign in to keep your players on every device."}</p>`
+    : `<div class="card empty-card">You're not following anyone yet. Search above, or open any player and tap <b>Follow</b>, and he'll show up here with his key stats and latest rating.</div>`}`;
+}
+
 async function loadGames(ids){
   let k = 0;
   await Promise.all(Array.from({ length: Math.min(6, ids.length) }, async () => {
@@ -1802,6 +1849,7 @@ document.addEventListener("click", e => {
   if(t.closest("[data-signout]")){ SB?.auth.signOut(); return; }
   if(t.closest("[data-follow]") && PLAYER){ toggleFollow({ id: PLAYER.id, name: `${PLAYER.first} ${PLAYER.last}`, team: PLAYER.team }); return; }
   const unf = t.closest("[data-unfollow]"); if(unf){ const f = FOLLOWS.find(x => x.player_id === +unf.dataset.unfollow); if(f) toggleFollow({ id: f.player_id, name: f.name, team: f.team }); return; }
+  const plf = t.closest("[data-plfollow]"); if(plf){ const id = +plf.dataset.plfollow, x = [...(LS?.sk || []), ...(LS?.go || [])].find(p => p.id === id); if(x && !isFollowing(id)) toggleFollow({ id, name: x.name, team: x.team }); plQ = ""; renderPlayersTab(); return; }
   const vt = t.closest("[data-vote]"); if(vt){ castVote(current, +vt.dataset.vote); return; }
   if(t.closest("[data-shareclose]") || t.id === "share-modal"){ closeShare(); return; }
   const shb = t.closest("[data-share]"); if(shb){ openShare(current, +shb.dataset.share); return; }
@@ -1842,6 +1890,7 @@ document.addEventListener("click", e => {
   const ap = t.closest("[data-advpos]"); if(ap){ advPos = ap.dataset.advpos; renderStats(); return; }
   const sh = t.closest(".shot"); if(sh) showTip(sh);
 });
+document.addEventListener("input", e => { if(e.target.id === "pl-q"){ plQ = e.target.value; renderPlayersTab(); const el = $("pl-q"); el.focus(); el.setSelectionRange(el.value.length, el.value.length); } });
 document.addEventListener("input", e => { const ci = e.target.closest?.("[data-cmpin]"); if(!ci) return; const i = +ci.dataset.cmpin; cmpQ[i] = ci.value; renderStats();
   const el = document.querySelector(`[data-cmpin="${i}"]`); if(el){ el.focus(); el.setSelectionRange(el.value.length, el.value.length); } });
 document.addEventListener("keydown", e => { if(e.key === "Escape" && !$("share-modal").hidden) closeShare(); if(e.key === "Escape" && !$("auth-modal").hidden) closeAuth(); });

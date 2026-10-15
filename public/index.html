@@ -375,6 +375,14 @@ table.lead-table .rk{width:34px;color:var(--muted)}
 .h2h-p .tlogo{margin-right:0} .h2h-p .tlogo img{width:1.2em;height:1.2em}
 .h2h-p .chip{font-size:11.5px;padding:0 5px;min-width:0}
 @media (max-width:520px){ .h2h-top{margin-left:0} .ln-nums{grid-template-columns:repeat(2,minmax(0,1fr))} }
+/* Players tab */
+.pl-add{position:relative;flex:0 1 320px;min-width:200px}
+.pl-add input{width:100%;font:inherit;font-size:14px;padding:8px 14px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
+.pblock .tb-head .av.md{width:44px;height:44px;flex:none}
+.pb-last{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);margin-top:2px}
+.pb-last .chip{font-size:11.5px;padding:0 5px;min-width:0;color:var(--r-chip-ink)} .pb-last .chip.mid{color:var(--r-mid-ink)} .pb-last .chip.na{color:var(--muted)}
+.tb-name > span{display:inline-flex;align-items:center;gap:.25em}
+.tb-name .tlogo{margin-right:0} .tb-name .tlogo img{width:1.1em;height:1.1em}
 /* Accounts */
 .acct-btn{order:5;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;padding:6px 14px;font-weight:600;font-size:14px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
 .acct-btn:hover{background:var(--hover)}
@@ -382,7 +390,7 @@ table.lead-table .rk{width:34px;color:var(--muted)}
 .acct-av,.acct-big{display:inline-grid;place-items:center;border-radius:50%;background:var(--accent);color:#fff;font-weight:700}
 .acct-av{width:28px;height:28px;font-size:14px}
 .acct-nm{max-width:120px;overflow:hidden;text-overflow:ellipsis}
-@media (max-width:640px){ .acct-btn{order:1;margin-left:auto} .nav{order:2;flex-basis:100%} .acct-nm{display:none} .acct-btn.in{padding:4px} }
+@media (max-width:640px){ .acct-btn{order:1;margin-left:auto} .nav{order:2;flex-basis:100%;min-width:0;overflow-x:auto;scrollbar-width:none;margin-inline:-4px;padding-inline:4px} .nav::-webkit-scrollbar{display:none} .nav button{flex:none;white-space:nowrap} .acct-nm{display:none} .acct-btn.in{padding:4px} }
 .auth-card{position:relative;max-width:400px;padding:22px 22px 18px}
 .auth-x{position:absolute;top:12px;right:12px}
 .auth-card h2{font-size:20px;margin:0 0 12px}
@@ -784,6 +792,7 @@ footer{color:var(--muted);font-size:12.5px;padding-block:8px 32px}
       <button type="button" data-view="scores" aria-current="page">Scores</button>
       <button type="button" data-view="standings">Standings</button>
       <button type="button" data-view="teams">Teams</button>
+      <button type="button" data-view="players">Players</button>
       <button type="button" data-view="stats">Stats</button>
       <button type="button" data-view="about"><span class="hide-sm">How it works</span><span class="show-sm">About</span></button>
     </nav>
@@ -820,6 +829,7 @@ footer{color:var(--muted);font-size:12.5px;padding-block:8px 32px}
     <section class="view" id="view-stats" hidden></section>
     <section class="view" id="view-teams" hidden></section>
     <section class="view" id="view-account" hidden></section>
+    <section class="view" id="view-players" hidden></section>
 
     <section class="view" id="view-about" hidden>
       <div class="card about">
