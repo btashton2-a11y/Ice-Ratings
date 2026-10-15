@@ -8,34 +8,40 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%231fa383'/%3E%3Cstop offset='1' stop-color='%230d5646'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='15' fill='url(%23g)'/%3E%3Cpath d='M51.5 6 L24 46 Q21 50.5 15.5 50.5 L9.5 50.5 Q5.5 50.5 5.5 46.75 Q5.5 43 9.5 43 L17.5 43 Q19.6 43 21 41 L45.5 2 Z' fill='%23fff'/%3E%3Cpath d='M45.5 2 L51.5 6 L49.2 9.4 L43.2 5.3 Z' fill='%230b1117'/%3E%3Cpath d='M10 43 h3 v7.5 h-3 Z M15 43 h3 v7.5 h-3 Z' fill='%230b1117' opacity='.85'/%3E%3Cpath d='M34 48 v6 a12 5.5 0 0 0 24 0 v-6 Z' fill='%230b1117'/%3E%3Cellipse cx='46' cy='48' rx='12' ry='5.5' fill='%2333414d'/%3E%3C/svg%3E">
 <script defer src="/_vercel/insights/script.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira:wght@400;500;600;700&family=Saira+Semi+Condensed:wght@500;600;700&display=swap">
 <style>
 /* Layout: sticky top bar (wordmark, Scores / Players / About, search). Scores = date bar, scrolling game strip, game detail with tabs + best-of-night side column. Player = hero + Profile / Games / Career tabs. */
+/* Theme: "Arena Night". Rink-at-night navy with ice-blue light; a bright ice version for light mode. Saira for text, Saira Semi Condensed for scores, numbers and headings. */
 :root{
-  --bg:#f4f6f8; --surface:#ffffff; --ink:#101820; --muted:#5f6b77; --line:#e3e8ee; --soft:#f1f4f7; --hover:#eef2f6;
-  --accent:#147a63; --live:#d42b3a; --blue-line:#1f4e9a; --red-line:#c8102e; --rinkline:#cfd9e2;
-  --r-elite:#147a63; --r-good:#2f9a55; --r-mid:#d29a1c; --r-low:#cf4038; --r-chip-ink:#ffffff; --r-mid-ink:#2a1d00;
-  --away:#1f4e9a; --home:#a23a5a;
-  --shadow:0 1px 2px rgba(16,24,32,.05), 0 4px 16px rgba(16,24,32,.04);
-  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
-  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  --bg:#EDF4F9; --surface:#FFFFFF; --ink:#0B1B2A; --muted:#55708A; --line:#D3E1EC; --soft:#F3F8FB; --hover:#E5EFF6;
+  --accent:#0A7FC0; --live:#C46A00; --blue-line:#1D5FB8; --red-line:#D0343A; --rinkline:#C6D7E5;
+  --r-elite:#0F8B6C; --r-good:#2F9A55; --r-mid:#D9A21B; --r-low:#D2443C; --r-chip-ink:#ffffff; --r-mid-ink:#2a1d00;
+  --away:#0A7FC0; --home:#E0663A; --on-accent:#ffffff;
+  --glow:radial-gradient(1100px 420px at 50% -220px, #CFE7F7, transparent 70%);
+  --shadow:0 1px 2px rgba(11,27,42,.05), 0 6px 18px rgba(11,27,42,.05);
+  --f-body:"Saira",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"Saira Semi Condensed","Saira",system-ui,sans-serif;
+  --f-display:"Saira Semi Condensed","Saira",system-ui,sans-serif;
   color-scheme:light;
 }
 @media (prefers-color-scheme: dark){ :root{
-  --bg:#0c1116; --surface:#141b22; --ink:#e7edf3; --muted:#94a2b0; --line:#232d37; --soft:#10171d; --hover:#1a232c;
-  --accent:#2bb38c; --live:#ff5b6b; --blue-line:#77a5ff; --red-line:#ff5b6b; --rinkline:#2c3b4b;
-  --r-elite:#1e9c7f; --r-good:#3aa862; --r-mid:#e0ab33; --r-low:#e0554c;
-  --away:#5e8ef0; --home:#d0607f; --shadow:none; color-scheme:dark }}
+  --bg:#0A141F; --surface:#10202F; --ink:#E7F0F7; --muted:#88A0B5; --line:#1D3346; --soft:#0D1B28; --hover:#15293B;
+  --accent:#56C6F5; --live:#FFB020; --blue-line:#56C6F5; --red-line:#FF6B57; --rinkline:#1E3A52;
+  --r-elite:#1FB58A; --r-good:#4FBF6A; --r-mid:#F2B33D; --r-low:#F05A4F; --r-chip-ink:#06121C; --r-mid-ink:#2a1d00;
+  --away:#56C6F5; --home:#FF8F5E; --on-accent:#06121C;
+  --glow:radial-gradient(1200px 520px at 50% -240px, #163852, transparent 70%);
+  --shadow:none; color-scheme:dark }}
 
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
-body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.5}
+body{margin:0;background:var(--glow) no-repeat,var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.5}
 [hidden]{display:none!important}
 button{font:inherit;color:inherit}
 .mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
 .muted{color:var(--muted)}
 .label{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
-h1,h2,h3{margin:0;font-weight:650;letter-spacing:-.01em;text-wrap:balance}
+h1,h2,h3{margin:0;font-family:var(--f-display);font-weight:700;letter-spacing:0;text-wrap:balance}
 .gutter{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
 .wrap{max-width:1240px;margin:0 auto}
 .card{background:var(--surface);border-radius:16px;box-shadow:var(--shadow);border:1px solid var(--line)}
@@ -50,7 +56,7 @@ h1,h2,h3{margin:0;font-weight:650;letter-spacing:-.01em;text-wrap:balance}
 .nav{display:flex;gap:4px}
 .nav button{border:0;background:none;padding:7px 12px;border-radius:999px;color:var(--muted);font-weight:500;cursor:pointer}
 .nav button:hover{background:var(--hover);color:var(--ink)}
-.nav button[aria-current="page"]{background:var(--ink);color:var(--surface)}
+.nav button[aria-current="page"]{background:var(--accent);color:var(--on-accent);font-weight:600}
 .search{position:relative;margin-left:auto;flex:0 1 300px;min-width:0}
 .search input{width:100%;font:inherit;font-size:14px;padding:8px 12px 8px 34px;border-radius:999px;border:1px solid var(--line);background:var(--soft);color:var(--ink)}
 .search input:focus{outline:none;border-color:var(--accent);background:var(--surface)}
@@ -250,7 +256,7 @@ table.lead-table .rk{width:34px;color:var(--muted)}
 .share-img{width:100%;height:auto;border-radius:12px;display:block}
 .share-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
 .share-actions .pill-btn{text-decoration:none;color:var(--ink)}
-.pill-btn.primary{background:var(--accent);border-color:var(--accent);color:#fff!important}
+.pill-btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)!important}
 /* Goalie form on previews */
 .gform{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted);margin:10px 0 2px}
 .gf-top{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
@@ -387,7 +393,7 @@ table.lead-table .rk{width:34px;color:var(--muted)}
 .acct-btn{order:5;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;padding:6px 14px;font-weight:600;font-size:14px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
 .acct-btn:hover{background:var(--hover)}
 .acct-btn.in{padding:4px 12px 4px 4px}
-.acct-av,.acct-big{display:inline-grid;place-items:center;border-radius:50%;background:var(--accent);color:#fff;font-weight:700}
+.acct-av,.acct-big{display:inline-grid;place-items:center;border-radius:50%;background:var(--accent);color:var(--on-accent);font-weight:700;font-family:var(--f-display)}
 .acct-av{width:28px;height:28px;font-size:14px}
 .acct-nm{max-width:120px;overflow:hidden;text-overflow:ellipsis}
 @media (max-width:640px){ .acct-btn{order:1;margin-left:auto} .nav{order:2;flex-basis:100%;min-width:0;overflow-x:auto;scrollbar-width:none;margin-inline:-4px;padding-inline:4px} .nav::-webkit-scrollbar{display:none} .nav button{flex:none;white-space:nowrap} .acct-nm{display:none} .acct-btn.in{padding:4px} }
@@ -406,7 +412,7 @@ table.lead-table .rk{width:34px;color:var(--muted)}
 .auth-foot{display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-top:14px;font-size:13.5px;color:var(--muted)}
 .p-acts{margin-left:auto;display:inline-flex;gap:8px}
 .p-head .p-acts .cmp-btn{margin-left:0}
-.follow-btn.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.follow-btn.on{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
 .fl-list{list-style:none;margin:0;padding:0}
 .best.mt .fl-list li button{grid-template-columns:30px minmax(0,1fr) auto}
 .best.mt .fl-list .who > span .tlogo img{width:1.1em;height:1.1em}
@@ -782,6 +788,11 @@ table.data tfoot td{font-weight:600;border-bottom:0}
 .notes b{color:var(--ink);font-weight:600}
 footer{color:var(--muted);font-size:12.5px;padding-block:8px 32px}
 .loading{padding:28px;color:var(--muted)}
+/* Arena Night type: condensed face for the things you read at a glance */
+.brand,.final,.abbr,.gchip .sc,.gchip .tm > span:nth-child(2),.when .t,.tb-s b,.pstat b,.p-quick b,.ln-nums b,.cmp-row .v,.wp-ab b,.tsched .sr{font-family:var(--f-display)}
+.brand{letter-spacing:0;font-size:19px}
+.chip{font-weight:600}
+.gchip .sc{font-weight:600}
 </style>
 </head>
 <body>

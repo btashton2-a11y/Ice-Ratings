@@ -1159,7 +1159,7 @@ async function makeShareCard(g, pl){
   const S = 1080, c = document.createElement("canvas"); c.width = S; c.height = S;
   const x = c.getContext("2d"), cs = getComputedStyle(document.documentElement);
   const BAND = { elite:"#1e9c7f", good:"#3aa862", mid:"#e0ab33", low:"#e0554c" }, bc = BAND[band(pl.rating)] || "#1e9c7f";
-  const F = (w, px, mono) => `${w} ${px}px ${mono ? '"IBM Plex Mono", ui-monospace, monospace' : '"IBM Plex Sans", system-ui, sans-serif'}`;
+  const F = (w, px, mono) => `${w} ${px}px ${mono ? '"Saira Semi Condensed", "Saira", sans-serif' : '"Saira", system-ui, sans-serif'}`;
   // background
   x.fillStyle = "#0c1116"; x.fillRect(0, 0, S, S);
   const gr = x.createRadialGradient(S / 2, 300, 40, S / 2, 300, 620); gr.addColorStop(0, bc + "55"); gr.addColorStop(1, "#0c111600");
