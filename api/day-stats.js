@@ -5,16 +5,17 @@ const r3 = v => Math.round(v * 1000) / 1000;
 const shiftDay = (d, n) => { const x = new Date(d + "T12:00:00Z"); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0,10); };
 // Skater: [id, name, team, pos, raw|null, toi, G, A, nonEmptyNetG, ixG, attempts, highDanger, CF5, CA5, xGF5, xGA5, SOG]
 // Goalie: [id, name, team, "G", raw|null, toi, xGA, GA, hdFaced, hdSaves, SA, SV, decision]
+// Both end with [gameId, opponent] (used for "Best of the week")
 export function statLines(g){
   const dv = derive(g), sc = scoreGame(g, DEFAULTS), sk = [], go = [];
   g.p.forEach((r, i) => {
     const p = sc[i], team = g.t[r[0]].ab;
     if(i >= g.g0){
       const toi = r[7]; if(!toi) return; const q = dv[i];
-      go.push([r[1], r[3], team, "G", toi >= MIN_TOI_G_BASE && p.raw != null ? r3(p.raw) : null, toi, r3(q.xga), q.ga, q.hdFaced, q.hdSaves, r[5], r[6], r[8] || ""]);
+      go.push([r[1], r[3], team, "G", toi >= MIN_TOI_G_BASE && p.raw != null ? r3(p.raw) : null, toi, r3(q.xga), q.ga, q.hdFaced, q.hdSaves, r[5], r[6], r[8] || "", g.id, g.t[1 - r[0]].ab]);
     } else {
       const s = dv[i], toi = r[12];
-      sk.push([r[1], r[3], team, r[4], toi >= MIN_TOI_SK && p.raw != null ? r3(p.raw) : null, toi, r[5], r[6], r[5] - s.en, r3(s.ixg), s.icf, s.hd, r[20], r[21], r[22], r[23], r[11]]);
+      sk.push([r[1], r[3], team, r[4], toi >= MIN_TOI_SK && p.raw != null ? r3(p.raw) : null, toi, r[5], r[6], r[5] - s.en, r3(s.ixg), s.icf, s.hd, r[20], r[21], r[22], r[23], r[11], g.id, g.t[1 - r[0]].ab]);
     }
   });
   return { sk, go };
