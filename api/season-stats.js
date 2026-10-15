@@ -8,7 +8,8 @@ export default async function handler(req, res){
     const today = nhlToday(), season = await seasonInfo(today);
     const proto = req.headers["x-forwarded-proto"] || "https", base = `${proto}://${req.headers.host}`;
     let cal = null; try { cal = (await (await fetch(`${base}/api/baseline`)).json()).cal; } catch(e){}
-    const S = new Map(), G = new Map(); let games = 0; const failed = [];
+    const S = new Map(), G = new Map(), T = new Map(); let games = 0; const failed = [];
+    const tm = ab => { let t = T.get(ab); if(!t){ t = { ab, xgf:0, gfne:0, icf:0, hd:0, xga:0, ga:0, sa:0, sv:0, hdf:0, hds:0 }; T.set(ab, t); } return t; };
     await mapLimit(datesBetween(season.start, today), 8, async d => {
       try {
         const r = await fetch(`${base}/api/day-stats?date=${d}`); if(!r.ok) throw new Error(r.status);
@@ -17,6 +18,7 @@ export default async function handler(req, res){
           const o = S.get(id) || { id, name, team, pos, gp:0, toi:0, g:0, a:0, gne:0, ixg:0, icf:0, hd:0, cf:0, ca:0, xgf:0, xga:0, sog:0, rs:0, rn:0, last:"" };
           o.gp++; o.toi += toi; o.g += g; o.a += a; o.gne += g5; o.ixg += ixg; o.icf += icf; o.hd += hd; o.cf += cf; o.ca += ca; o.xgf += xgf; o.xga += xga; o.sog += sog;
           if(d >= o.last){ o.last = d; o.team = team; o.pos = pos; }
+          { const t = tm(team); t.xgf += ixg; t.gfne += g5; t.icf += icf; t.hd += hd; }
           if(raw != null && cal){ o.rs += calibrate(raw, cal[grpOf(pos)]).rating; o.rn++; }
           S.set(id, o);
         }
@@ -24,6 +26,7 @@ export default async function handler(req, res){
           const o = G.get(id) || { id, name, team, gp:0, toi:0, xga:0, ga:0, hdf:0, hds:0, sa:0, sv:0, w:0, rs:0, rn:0, last:"" };
           o.gp++; o.toi += toi; o.xga += xga; o.ga += ga; o.hdf += hdf; o.hds += hds; o.sa += sa; o.sv += sv; if(dec === "W") o.w++;
           if(d >= o.last){ o.last = d; o.team = team; }
+          { const t = tm(team); t.xga += xga; t.ga += ga; t.sa += sa; t.sv += sv; t.hdf += hdf; t.hds += hds; }
           if(raw != null && cal){ o.rs += calibrate(raw, cal.G).rating; o.rn++; }
           G.set(id, o);
         }
@@ -42,6 +45,9 @@ export default async function handler(req, res){
       hdsv: o.hdf ? r3(o.hds / o.hdf) : null, hdf:o.hdf, rating: o.rn ? r2(o.rs / o.rn) : null, rated: o.rn
     }));
     res.setHeader("Cache-Control", failed.length ? "public, s-maxage=300" : "public, s-maxage=1800, stale-while-revalidate=7200");
-    res.status(200).json({ season: season.id, through: today, games, failed, skaters, goalies });
+    // Teams: expected goals for (from their shooters) and against (from their goalies), all situations, empty-net shots left out
+    const teams = [...T.values()].map(t => ({ ab: t.ab, xgf: r2(t.xgf), xga: r2(t.xga), xgPct: t.xgf + t.xga ? r3(t.xgf / (t.xgf + t.xga)) : null,
+      gax: r2(t.gfne - t.xgf), gsax: r2(t.xga - t.ga), hd: t.hd, hdsv: t.hdf ? r3(t.hds / t.hdf) : null, icf: t.icf }));
+    res.status(200).json({ season: season.id, through: today, games, failed, skaters, goalies, teams });
   } catch(e){ res.status(502).json({ error: "Couldn't build season stats.", detail: String(e) }); }
 }
