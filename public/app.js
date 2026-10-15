@@ -976,7 +976,7 @@ function renderTeam(ab){
     ["Power play", fmtTeam("ppPct", t.ppPct), R("ppPct")], ["Power-play goals", t.ppg ?? "–", R("ppg")], ["Penalty kill", fmtTeam("pkPct", t.pkPct), R("pkPct")],
     ["Shots per game", fmtTeam("sfpg", t.sfpg), R("sfpg")], ["Shots against per game", fmtTeam("sapg", t.sapg), R("sapg", true)],
     ["Faceoff win %", fmtTeam("foPct", t.foPct), R("foPct")], ["Hits", t.hits ?? "–", R("hits")], ["Blocked shots", t.blk ?? "–", R("blk")],
-    ["Takeaways", t.tk ?? "–", R("tk")], ["Giveaways", t.gv ?? "–", null], ["Shutouts", t.so ?? "–", R("so")],
+    ["Takeaways", t.tk ?? "–", R("tk")], ["Giveaways", t.gv ?? "–", R("gv", true)], ["Shutouts", t.so ?? "–", R("so")],
     ["Home", t.home, null], ["Road", t.road, null], ["Last 10", t.l10, null], ["Streak", t.strk || "–", null]
   ];
   const adv = t.xgf != null ? [
