@@ -150,56 +150,79 @@ function renderBest(){
   const nLive = dayGames().filter(g => live(g.st)).length;
   $("best-h").textContent = nLive ? "Best performances so far" : "Best performances";
   $("best-sub").textContent = `${tinyDay(viewDate)} · ${dayGames().length} game${dayGames().length === 1 ? "" : "s"}${nLive ? ` · ${nLive} live` : ""}`;
-  const n = bestAll ? 10 : 5;
-  $("best-list").innerHTML = all.slice(0, n).map((p,i) => {
+  $("best-list").innerHTML = all.slice(0, BEST_N).map((p,i) => {
     const opp = p.g.t[1-p.side].ab;
     return `<li><button type="button" data-g="${p.g.id}" data-p="${p.id}">
       <span class="rk">${i+1}</span><span class="av sm side${p.side}"><span class="face" aria-hidden="true">${initials(p.name)}${mug(p.id)}</span></span>
       <span class="who"><b>${esc(p.name)}</b><span>${logo(p.g.t[p.side].ab)}${esc(p.g.t[p.side].ab)} ${p.side === 0 ? "at" : "vs"} ${esc(opp)} · ${esc(p.line)}</span></span>
       ${chip(p.rating)}</button></li>`;
   }).join("");
-  $("best-more").hidden = all.length <= 5;
-  $("best-more").textContent = bestAll ? "Show top 5" : "Show top 10";
+  fadeEnd($("best-list"));
 }
 
-// ---------- Best of the week (Monday to Sunday of the week being viewed) ----------
-let WEEK = { key: null, rows: null, at: 0, days: 0, games: 0 }, weekAll = false;
+// ---------- Best of the week (Monday to Sunday) and of the month, for the date being viewed ----------
 const mondayOf = d => { const x = new Date(d + "T12:00:00Z"), dow = (x.getUTCDay() + 6) % 7; return shiftDate(d, -dow); };
+const monthEnd = d => { const [y, m] = d.split("-").map(Number); return new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10); };
+const PERIODS = {
+  week:  { box: "wbest", range: d => { const a = mondayOf(d); return [a, shiftDate(a, 6)]; } },
+  month: { box: "mbest", range: d => [d.slice(0, 8) + "01", monthEnd(d)] }
+};
+const PER = { week: { key: null, rows: null, games: 0 }, month: { key: null, rows: null, games: 0 } };
+const BEST_N = 25;
+// Each day's stats are fetched once and shared by the week and month cards; recent days are refetched every 10 minutes
+const DAYS = new Map();
+function dayStats(d){
+  const c = DAYS.get(d), recent = d >= shiftDate(SCHED.today, -1);
+  if(c && (!recent || Date.now() - c.at < 10 * 60 * 1000)) return c.p;
+  const p = api(`/api/day-stats?date=${d}`).catch(() => { DAYS.delete(d); return null; });
+  DAYS.set(d, { at: Date.now(), p });
+  return p;
+}
+async function pooled(items, n, fn){
+  const out = new Array(items.length); let i = 0;
+  await Promise.all(Array.from({ length: Math.min(n, items.length) }, async () => { while(i < items.length){ const k = i++; out[k] = await fn(items[k]); } }));
+  return out;
+}
 function sideVisibility(){
-  const show = !$("best").hidden || !$("wbest").hidden;
+  const show = ["best", "wbest", "mbest"].some(id => !$(id).hidden);
   document.querySelector(".scores-grid").classList.toggle("solo", !show);
 }
-async function loadWeek(force = false){
+function loadWeek(){ loadPeriod("week"); loadPeriod("month"); }
+async function loadPeriod(k){
   if(!viewDate || !SCHED) return;
-  const mon = mondayOf(viewDate), today = SCHED.today;
-  const stale = Date.now() - WEEK.at > 10 * 60 * 1000;
-  if(WEEK.key === mon && WEEK.rows && !force && !(stale && mon === mondayOf(today))) { renderWeekBest(); return; }
-  const key = mon; WEEK = { key, rows: WEEK.key === key ? WEEK.rows : null, at: Date.now(), days: 0, games: 0 };
-  const days = Array.from({ length: 7 }, (_, i) => shiftDate(mon, i)).filter(d => d <= today);
-  const res = await Promise.all(days.map(d => api(`/api/day-stats?date=${d}`).then(j => ({ d, j })).catch(() => null)));
-  if(WEEK.key !== key) return;   // the user moved to another week meanwhile
-  const rows = [];
-  res.forEach(r => { if(!r) return; WEEK.games += r.j.games || 0; if(r.j.games) WEEK.days++;
+  const [a, b] = PERIODS[k].range(viewDate), today = SCHED.today;
+  const days = []; for(let d = a; d <= b && d <= today; d = shiftDate(d, 1)) days.push(d);
+  if(PER[k].key !== a) PER[k] = { key: a, rows: null, games: 0 };
+  const res = await pooled(days, 6, d => dayStats(d).then(j => j && { d, j }));
+  if(PER[k].key !== a) return;   // the user moved to another week or month meanwhile
+  const rows = []; let games = 0;
+  res.forEach(r => { if(!r) return; games += r.j.games || 0;
     (r.j.sk || []).forEach(x => { if(x[4] != null) rows.push({ id:x[0], name:x[1], team:x[2], pos:x[3], raw:x[4], grp: E.grpOf(x[3]), d:r.d, gid:x[17], opp:x[18], line:`${x[6]}G ${x[7]}A · ${E.fmtToi(x[5])}` }); });
     (r.j.go || []).forEach(x => { if(x[4] != null) rows.push({ id:x[0], name:x[1], team:x[2], pos:"G", raw:x[4], grp:"G", d:r.d, gid:x[13], opp:x[14], line:`${x[11]}/${x[10]} saves${x[12] === "W" ? " · W" : ""}` }); });
   });
-  WEEK.rows = rows;
-  renderWeekBest();
+  PER[k] = { key: a, rows, games };
+  renderPeriod(k);
 }
-function renderWeekBest(){
-  const box = $("wbest");
-  if(!WEEK.rows || !CALS || view !== "scores"){ box.hidden = true; sideVisibility(); return; }
-  const all = WEEK.rows.map(r => ({ ...r, rating: E.calibrate(r.raw, CALS[r.grp], SCALE).rating })).sort((a,b) => b.rating - a.rating || b.raw - a.raw);
+// Scrolling lists fade at the bottom until you reach the end
+const fadeEnd = el => el && el.classList.toggle("end", el.scrollTop + el.clientHeight >= el.scrollHeight - 4);
+document.addEventListener("scroll", e => { if(e.target.matches && e.target.matches(".best ol")) fadeEnd(e.target); }, true);
+function renderWeekBest(){ renderPeriod("week"); renderPeriod("month"); }
+function renderPeriod(k){
+  const id = PERIODS[k].box, box = $(id), P = PER[k];
+  if(!P.rows || !CALS || view !== "scores"){ box.hidden = true; sideVisibility(); return; }
+  const all = P.rows.map(r => ({ ...r, rating: E.calibrate(r.raw, CALS[r.grp], SCALE).rating })).sort((a,b) => b.rating - a.rating || b.raw - a.raw);
   box.hidden = !all.length; sideVisibility();
   if(!all.length) return;
-  const mon = WEEK.key, sun = shiftDate(mon, 6), wd = d => new Date(d + "T12:00:00Z").toLocaleDateString("en-US", { weekday:"short", timeZone:"UTC" });
-  $("wbest-sub").textContent = `${tinyDay(mon)} – ${tinyDay(sun)} · ${WEEK.games} game${WEEK.games === 1 ? "" : "s"}${sun >= SCHED.today ? " so far" : ""}`;
-  $("wbest-list").innerHTML = all.slice(0, weekAll ? 10 : 5).map((p,i) => `<li><button type="button" data-g="${p.gid}" data-p="${p.id}" data-date="${p.d}">
+  const [a, b] = PERIODS[k].range(P.key), soFar = b >= SCHED.today ? " so far" : "", n = `${P.games} game${P.games === 1 ? "" : "s"}${soFar}`;
+  const wd = d => new Date(d + "T12:00:00Z").toLocaleDateString("en-US", k === "week" ? { weekday:"short", timeZone:"UTC" } : { month:"short", day:"numeric", timeZone:"UTC" });
+  $(id + "-sub").textContent = k === "week" ? `${tinyDay(a)} – ${tinyDay(b)} · ${n}`
+    : `${new Date(a + "T12:00:00Z").toLocaleDateString("en-US", { month:"long", year:"numeric", timeZone:"UTC" })} · ${n}`;
+  const list = $(id + "-list"); list.scrollTop = 0;
+  list.innerHTML = all.slice(0, BEST_N).map((p,i) => `<li><button type="button" data-g="${p.gid}" data-p="${p.id}" data-date="${p.d}">
       <span class="rk">${i+1}</span><span class="av sm"><span class="face" aria-hidden="true">${initials(p.name)}${mug(p.id)}</span></span>
       <span class="who"><b>${esc(p.name)}</b><span>${logo(p.team)}${esc(p.team)} vs ${esc(p.opp)} · ${wd(p.d)} · ${esc(p.line)}</span></span>
       ${chip(p.rating)}</button></li>`).join("");
-  $("wbest-more").hidden = all.length <= 5;
-  $("wbest-more").textContent = weekAll ? "Show top 5" : "Show top 10";
+  fadeEnd(list);
 }
 
 // ---------- Scores: game detail ----------
@@ -929,16 +952,17 @@ function renderTeams(){
   const host = $("view-teams");
   if(!TEAMS) return;
   if(teamDetail){ renderTeam(teamDetail); return; }
-  const T = teamsWithAdv(), { k, d } = teamSort, c = TEAM_COLS.find(x => x[0] === k);
-  T.sort((a,b) => k === "pts" ? (b.pts - a.pts) || (a.leagueSeq - b.leagueSeq) : ((b[k] ?? -1e9) - (a[k] ?? -1e9)) * d || a.leagueSeq - b.leagueSeq);
-  if(k === "pts" && d < 0) T.reverse();
-  const head = `<tr><th class="l rk">#</th><th class="l">Team</th>${TEAM_COLS.map(([key,l,dir,cls]) => `<th class="${cls || ""}">${dir ? `<button type="button" class="sort" data-tsort="${key}" aria-pressed="${k === key}">${l}${k === key ? (d > 0 ? " ↓" : " ↑") : ""}</button>` : l}</th>`).join("")}</tr>`;
-  const body = T.map((t,i) => `<tr class="click" data-team="${esc(t.ab)}" tabindex="0"><td class="l rk">${i+1}</td>
-    <td class="l"><span class="tcell">${logo(t.ab)}<span class="tname"><span class="full">${esc(t.name)}</span><span class="abv">${esc(t.ab)}</span></span></span></td>
-    ${TEAM_COLS.map(([key,,,cls]) => `<td class="${cls || ""}${key === "pts" ? " pts" : ""}">${esc(fmtTeam(key, t[key]))}</td>`).join("")}</tr>`).join("");
+  const T = teamsWithAdv().sort((a,b) => a.name.localeCompare(b.name));
+  const KEYS = [["gfpg","Goals/gm"],["gapg","Allowed/gm",true],["ppPct","Power play"],["pkPct","Penalty kill"],["sfpg","Shots/gm"],["sapg","Shots vs/gm",true],["xgPct","xG share"],["foPct","Faceoff %"]];
+  // a value in the league's top 5 is marked green, bottom 5 red
+  const tier = (t, key, asc) => { const r = rankOf(T, t.ab, key, { asc, neg: true }); return r == null ? "" : r.rank <= 5 ? " hi" : r.rank > r.of - 5 ? " lo" : ""; };
+  const block = t => `<button type="button" class="card tblock" data-team="${esc(t.ab)}">
+      <span class="tb-head">${logo(t.ab, "big")}<span class="tb-name"><b>${esc(t.name)}</b><span>${esc(t.w)}-${esc(t.l)}-${esc(t.otl)} · ${t.pts} pts${t.strk ? ` · ${esc(t.strk)}` : ""}</span></span></span>
+      <span class="tb-stats">${KEYS.map(([key, l, asc]) => `<span class="tb-s${tier(t, key, asc)}"><b>${esc(fmtTeam(key, t[key]))}</b><small>${l}</small></span>`).join("")}</span>
+    </button>`;
   host.innerHTML = `<div class="page-head"><h1>Teams</h1></div>
-    <section class="card stand-card"><div class="tbl-wrap"><table class="data stand teams-table"><thead>${head}</thead><tbody>${body}</tbody></table></div></section>
-    <p class="muted small">Tap a team for its full stats. Tap a column to sort. GF/G and GA/G are goals for and against per game; PP% and PK% are power play and penalty kill; SF/G and SA/G are shots for and against per game; shot attempt % is the team's share of all shot attempts at 5-on-5; xG% is its share of expected goals (from <a href="https://moneypuck.com" target="_blank" rel="noopener">MoneyPuck.com</a>).</p>`;
+    <div class="tblocks">${T.map(block).join("")}</div>
+    <p class="muted small">Tap a team for its full stats. Green marks a top-5 number in the NHL, red a bottom-5 one. "/gm" means per game. xG share is the team's share of expected goals (from <a href="https://moneypuck.com" target="_blank" rel="noopener">MoneyPuck.com</a>).</p>`;
 }
 function renderTeam(ab){
   const host = $("view-teams"), T = teamsWithAdv(), t = T.find(x => x.ab === ab);
@@ -1062,13 +1086,11 @@ document.addEventListener("click", e => {
   const nv = t.closest(".nav button"); if(nv){ setView(nv.dataset.view); if(nv.dataset.view === "scores" && SCHED) renderScores(); return; }
   if(t.closest("#home-btn")){ if(SCHED && viewDate === SCHED.today){ setView("scores"); renderScores(); } else if(SCHED) goDay(SCHED.today); return; }
   const gc = t.closest(".gchip"); if(gc){ current = +gc.dataset.g; open.clear(); renderStrip(); renderGame(); return; }
-  const wb = t.closest("#wbest-list button"); if(wb){ const gid = +wb.dataset.g, pid = +wb.dataset.p, d = wb.dataset.date; gameTab = "ratings";
+  const wb = t.closest(".pbest-list button"); if(wb){ const gid = +wb.dataset.g, pid = +wb.dataset.p, d = wb.dataset.date; gameTab = "ratings";
     if(d === viewDate){ current = gid; open.clear(); open.add(pid); renderStrip(); renderGame(); scrollToRow(pid); }
     else goDay(d, { select: gid }).then(() => { open.add(pid); renderGame(); scrollToRow(pid); });
     return; }
-  if(t.closest("#wbest-more")){ weekAll = !weekAll; renderWeekBest(); return; }
   const bp = t.closest("#best-list button"); if(bp){ current = +bp.dataset.g; open.clear(); open.add(+bp.dataset.p); gameTab = "ratings"; renderStrip(); renderGame(); scrollToRow(+bp.dataset.p); return; }
-  if(t.closest("#best-more")){ bestAll = !bestAll; renderBest(); return; }
   const gt = t.closest("[data-gtab]"); if(gt){ gameTab = gt.dataset.gtab; renderGame(); return; }
   const st = t.closest(".star[data-open]"); if(st){ const id = +st.dataset.open; open.add(id); renderGame(); scrollToRow(id); return; }
   const pb = t.closest(".player > button[data-id]"); if(pb){ const id = +pb.dataset.id; open.has(id) ? open.delete(id) : open.add(id); renderGame(); document.querySelector(`.player > button[data-id="${id}"]`)?.focus(); return; }

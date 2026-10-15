@@ -115,8 +115,9 @@ main{padding-block:20px 56px}
 @media (prefers-reduced-motion:no-preference){ .live-tag i{animation:pulse 1.6s ease-in-out infinite} @keyframes pulse{50%{opacity:.25}} }
 
 .scores-grid{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:18px;align-items:start}
-.side{position:sticky;top:84px;display:flex;flex-direction:column;gap:18px}
-@media (max-width:980px){ .scores-grid{grid-template-columns:minmax(0,1fr)} .side{position:static;order:-1} }
+.side{position:sticky;top:84px;display:flex;flex-direction:column;gap:18px;max-height:calc(100vh - 100px);overflow-y:auto;overscroll-behavior:contain;scrollbar-width:none}
+.side::-webkit-scrollbar{display:none}
+@media (max-width:980px){ .scores-grid{grid-template-columns:minmax(0,1fr)} .side{position:static;order:-1;max-height:none;overflow:visible} }
 .empty-card{padding:28px;color:var(--muted)}
 .scores-grid.solo{grid-template-columns:minmax(0,1fr)}
 /* Standings + league stats */
@@ -195,6 +196,21 @@ table.lead-table .rk{width:34px;color:var(--muted)}
 .pstat.top small{color:var(--accent);font-weight:600}
 .muted a,.small a,.lnote a{color:inherit}
 /* Teams */
+.tblocks{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;margin-bottom:14px}
+.tblock{all:unset;box-sizing:border-box;display:flex;flex-direction:column;gap:12px;padding:14px 16px;cursor:pointer;background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);transition:transform .12s ease,border-color .12s ease}
+.tblock:hover{border-color:var(--accent);transform:translateY(-1px)}
+.tblock:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.tb-head{display:flex;align-items:center;gap:12px;min-width:0}
+.tb-head .tlogo{margin:0}
+.tb-head .tlogo.big img{width:44px;height:44px}
+.tb-name{display:flex;flex-direction:column;min-width:0}
+.tb-name b{font-size:16px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tb-name span{font-size:13px;color:var(--muted)}
+.tb-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px 6px;border-top:1px solid var(--line);padding-top:10px}
+.tb-s{display:flex;flex-direction:column;min-width:0}
+.tb-s b{font-size:15px;font-weight:700;font-variant-numeric:tabular-nums}
+.tb-s small{font-size:11px;color:var(--muted);line-height:1.2}
+.tb-s.hi b{color:var(--r-good)} .tb-s.lo b{color:var(--r-low)}
 .tlink{cursor:pointer}
 .tlink:hover .full,.tlink:hover .abv{text-decoration:underline}
 .teams-table tr.click td{cursor:pointer}
@@ -290,7 +306,9 @@ table.lead-table .rk{width:34px;color:var(--muted)}
 .best{padding:16px 16px 10px}
 .best h2{font-size:16px;margin-bottom:2px}
 .best .sub{font-size:13px;color:var(--muted);margin-bottom:8px}
-.best ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.best ol{list-style:none;margin:0 -6px;padding:0 6px;display:flex;flex-direction:column;max-height:262px;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:var(--line) transparent;-webkit-mask-image:linear-gradient(#000 calc(100% - 22px),transparent);mask-image:linear-gradient(#000 calc(100% - 22px),transparent)}
+.best ol.end{-webkit-mask-image:none;mask-image:none}
+.best ol::-webkit-scrollbar{width:6px} .best ol::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px}
 .best li button{all:unset;box-sizing:border-box;width:100%;display:grid;grid-template-columns:18px 30px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 6px;border-radius:10px;cursor:pointer}
 .best li button:hover{background:var(--hover)}
 .best .rk{font-family:var(--f-mono);font-size:12px;color:var(--muted);text-align:right}
@@ -533,7 +551,7 @@ footer{color:var(--muted);font-size:12.5px;padding-block:8px 32px}
       <div class="strip" id="strip" aria-label="Games"></div>
       <div class="scores-grid">
         <div id="game"></div>
-        <aside class="side"><section class="card best" id="best" hidden aria-labelledby="best-h"><h2 id="best-h">Best performances</h2><div class="sub" id="best-sub"></div><ol id="best-list"></ol><button type="button" class="more-btn" id="best-more" hidden></button></section><section class="card best" id="wbest" hidden aria-labelledby="wbest-h"><h2 id="wbest-h">Best of the week</h2><div class="sub" id="wbest-sub"></div><ol id="wbest-list"></ol><button type="button" class="more-btn" id="wbest-more" hidden></button></section></aside>
+        <aside class="side"><section class="card best" id="best" hidden aria-labelledby="best-h"><h2 id="best-h">Best performances</h2><div class="sub" id="best-sub"></div><ol id="best-list"></ol></section><section class="card best" id="wbest" hidden aria-labelledby="wbest-h"><h2 id="wbest-h">Best of the week</h2><div class="sub" id="wbest-sub"></div><ol id="wbest-list" class="pbest-list"></ol></section><section class="card best" id="mbest" hidden aria-labelledby="mbest-h"><h2 id="mbest-h">Best of the month</h2><div class="sub" id="mbest-sub"></div><ol id="mbest-list" class="pbest-list"></ol></section></aside>
       </div>
     </section>
 
