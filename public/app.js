@@ -75,14 +75,38 @@ function rateAll(){
   }
   RATED = {};
   games.forEach(g => {
+    const isLive = !done(g.st), f = gameFrac(g);
     RATED[g.id] = scored[g.id].map(p => {
       if(p.raw == null) return { ...p, rating:null, note:"Did not play." };
-      if(!p.goalie && p.toi < E.MIN_TOI_SK) return { ...p, rating:null, note: done(g.st) ? `Only ${E.fmtToi(p.toi)} of ice time, so no rating is given.` : `Rated once he passes 5:00 of ice time (${E.fmtToi(p.toi)} so far).` };
+      if(!isLive && !p.goalie && p.toi < E.MIN_TOI_SK) return { ...p, rating:null, note:`Only ${E.fmtToi(p.toi)} of ice time, so no rating is given.` };
       if(!CALS) return { ...p, rating:null, note:"Ratings appear once the season comparison loads." };
-      const grp = E.grpOf(p.pos), c = E.calibrate(p.raw, CALS[grp], SCALE);
-      return { ...p, grp, rating:c.rating, pct:c.pct, z:c.z };
+      const grp = E.grpOf(p.pos), cal = CALS[grp];
+      const raw = isLive ? liveRaw(p, cal, f) : p.raw;
+      const c = E.calibrate(raw, cal, SCALE);
+      return { ...p, grp, rating:c.rating, pct:c.pct, z:c.z, live:isLive };
     });
   });
+}
+// How far through regulation a game is (0 at puck drop, 1 at the end of the 3rd)
+function gameFrac(g){
+  if(done(g.st)) return 1;
+  const prd = g.prd || 1;
+  if(prd > 3) return 1;
+  const [m, sec] = String(g.clk || "20:00").split(":").map(Number), left = (m || 0) * 60 + (sec || 0);
+  const elapsed = (prd - 1) * 1200 + (g.inter ? 1200 : Math.max(0, 1200 - left));
+  return Math.max(0, Math.min(1, elapsed / 3600));
+}
+// Live games: every dressed player starts at a typical game (6.6) and moves with what he does. What he has done so far
+// counts in full; the part of the game still to be played is filled in as an average night. Ice time is judged on his pace.
+// At the final horn this is exactly his post-game rating.
+function liveRaw(p, cal, f){
+  const typical = cal.q[100];
+  if(p.goalie) return p.raw + (1 - f) * typical;
+  const toiRow = p.rows.find(r => r[1].startsWith("Ice time")), toiNow = toiRow ? toiRow[2] : 0;
+  const Wp = p.pos === "D" ? { ...W, ...E.DEFENSE_WEIGHTS } : W;
+  const paceMin = f > 0.02 ? (p.toi / 60) / f : (Wp.toiBase ?? 15);
+  const toiPace = Math.max(-.15, Math.min(.3, (paceMin - (Wp.toiBase ?? 15)) * Wp.toi));
+  return (p.raw - toiNow) + f * toiPace + (1 - f) * typical;
 }
 
 // ---------- Shared bits ----------
