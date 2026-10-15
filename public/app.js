@@ -948,6 +948,16 @@ async function loadTeamSched(ab){
   catch(e){ TEAM_SCHED.set(ab, { at: Date.now(), error: e.message }); }
   if(view === "teams" && teamDetail === ab) renderTeams();
 }
+// Favorite teams, saved in this browser only
+const FAV_KEY = "puck-fav-teams";
+let FAVS = (() => { try { const a = JSON.parse(localStorage.getItem(FAV_KEY) || "[]"); return Array.isArray(a) ? a.filter(x => typeof x === "string") : []; } catch(e){ return []; } })();
+const isFav = ab => FAVS.includes(ab);
+function toggleFav(ab){
+  FAVS = isFav(ab) ? FAVS.filter(x => x !== ab) : [...FAVS, ab];
+  try { localStorage.setItem(FAV_KEY, JSON.stringify(FAVS)); } catch(e){}
+}
+const STAR = `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M12 3.2l2.7 5.6 6.1.8-4.5 4.2 1.1 6-5.4-2.9-5.4 2.9 1.1-6-4.5-4.2 6.1-.8z"/></svg>`;
+const favBtn = (t, cls = "") => `<button type="button" class="fav${isFav(t.ab) ? " on" : ""}${cls}" data-fav="${esc(t.ab)}" aria-pressed="${isFav(t.ab)}" aria-label="${isFav(t.ab) ? "Remove" : "Add"} ${esc(t.name)} ${isFav(t.ab) ? "from" : "to"} favorites" title="${isFav(t.ab) ? "Remove from favorites" : "Add to favorites"}">${STAR}</button>`;
 function renderTeams(){
   const host = $("view-teams");
   if(!TEAMS) return;
@@ -956,13 +966,15 @@ function renderTeams(){
   const KEYS = [["gfpg","Goals/gm"],["gapg","Allowed/gm",true],["ppPct","Power play"],["pkPct","Penalty kill"],["sfpg","Shots/gm"],["sapg","Shots vs/gm",true],["xgPct","xG share"],["foPct","Faceoff %"]];
   // a value in the league's top 5 is marked green, bottom 5 red
   const tier = (t, key, asc) => { const r = rankOf(T, t.ab, key, { asc, neg: true }); return r == null ? "" : r.rank <= 5 ? " hi" : r.rank > r.of - 5 ? " lo" : ""; };
-  const block = t => `<button type="button" class="card tblock" data-team="${esc(t.ab)}">
+  const block = t => `<div class="tblock-wrap"><button type="button" class="card tblock" data-team="${esc(t.ab)}">
       <span class="tb-head">${logo(t.ab, "big")}<span class="tb-name"><b>${esc(t.name)}</b><span>${esc(t.w)}-${esc(t.l)}-${esc(t.otl)} · ${t.pts} pts${t.strk ? ` · ${esc(t.strk)}` : ""}</span></span></span>
       <span class="tb-stats">${KEYS.map(([key, l, asc]) => `<span class="tb-s${tier(t, key, asc)}"><b>${esc(fmtTeam(key, t[key]))}</b><small>${l}</small></span>`).join("")}</span>
-    </button>`;
+    </button>${favBtn(t)}</div>`;
+  const favs = FAVS.map(ab => T.find(t => t.ab === ab)).filter(Boolean);
   host.innerHTML = `<div class="page-head"><h1>Teams</h1></div>
-    <div class="tblocks">${T.map(block).join("")}</div>
-    <p class="muted small">Tap a team for its full stats. Green marks a top-5 number in the NHL, red a bottom-5 one. "/gm" means per game. xG share is the team's share of expected goals (from <a href="https://moneypuck.com" target="_blank" rel="noopener">MoneyPuck.com</a>).</p>`;
+    ${favs.length ? `<h2 class="tsec-h">Favorites</h2><div class="tblocks">${favs.map(block).join("")}</div><h2 class="tsec-h">All teams</h2>` : ""}
+    <div class="tblocks">${T.filter(t => !isFav(t.ab)).map(block).join("")}</div>
+    <p class="muted small">Tap the star on a team to add it to your favorites, which stay at the top (saved on this device). Tap a team for its full stats. Green marks a top-5 number in the NHL, red a bottom-5 one. "/gm" means per game. xG share is the team's share of expected goals (from <a href="https://moneypuck.com" target="_blank" rel="noopener">MoneyPuck.com</a>).</p>`;
 }
 function renderTeam(ab){
   const host = $("view-teams"), T = teamsWithAdv(), t = T.find(x => x.ab === ab);
@@ -1012,7 +1024,7 @@ function renderTeam(ab){
   }
   host.innerHTML = `<button type="button" class="back" data-teamsback>← All teams</button>
   <article class="card">
-    <div class="team-hero">${logo(t.ab, "big")}<div><h1>${esc(t.name)}</h1>
+    <div class="team-hero">${logo(t.ab, "big")}<div class="th-main"><h1>${esc(t.name)}${favBtn(t, " inline")}</h1>
       <div class="sub">${esc(t.w)}-${esc(t.l)}-${esc(t.otl)} · ${t.pts} points · ${nth(t.divSeq)} in the ${esc(t.div)} · ${nth(t.leagueSeq)} in the NHL${t.strk ? ` · ${esc(streakTxt(t.strk))}` : ""}</div></div></div>
     <section class="pv-sec"><h3 class="pstat-h">Team stats</h3><div class="pstat-grid">${std.map(([l,v,r]) => tile(l, v, r)).join("")}</div></section>
     ${adv ? `<section class="pv-sec"><h3 class="pstat-h">Advanced</h3><div class="pstat-grid">${adv.map(([l,v,r]) => tile(l, v, r)).join("")}</div><p class="muted small">All situations, empty-net goals left out. Expected goals from <a href="https://moneypuck.com" target="_blank" rel="noopener">MoneyPuck.com</a>; shot attempt share is at 5-on-5.</p></section>` : (!ADV ? `<section class="pv-sec"><p class="muted small">Loading advanced stats…</p></section>` : "")}
@@ -1099,6 +1111,7 @@ document.addEventListener("click", e => {
   const gl = t.closest("[data-gamelink]"); if(gl){ openGameFromPlayer(+gl.dataset.gamelink, gl.dataset.date); return; }
   if(t.id === "see-prev"){ goDay(shiftDate(viewDate, -1)); return; }
   const tsort = t.closest("[data-tsort]"); if(tsort){ const k = tsort.dataset.tsort, c = TEAM_COLS.find(x => x[0] === k), d0 = c[2] < 0 ? 1 : -1; teamSort = teamSort.k === k ? { k, d: -teamSort.d } : { k, d: d0 }; renderTeams(); return; }
+  const fv = t.closest("[data-fav]"); if(fv){ toggleFav(fv.dataset.fav); renderTeams(); return; }
   const tl = t.closest("[data-team]"); if(tl){ openTeam(tl.dataset.team); return; }
   if(t.closest("[data-teamsback]")){ teamDetail = null; try { history.pushState({ view:"teams" }, ""); } catch(e){} renderTeams(); window.scrollTo(0, 0); return; }
   const stb = t.closest("[data-stab]"); if(stb){ standTab = stb.dataset.stab; standSort = null; renderStandings(); return; }
