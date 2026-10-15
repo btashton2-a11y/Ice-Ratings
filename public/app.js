@@ -1414,21 +1414,64 @@ function wpChart(g){
 }
 
 // ---------- Lines (linemates) ----------
+const openLines = new Set();
+const lineKey = l => `${l[0]}-${l[1]}-${l[2].join(".")}`;
+function lineRink(shots, mine, g, side){
+  const pts = shots.filter(s => s[0] === mine && s[2] >= 25).map(s => { const [, res, x, y, xg] = s, r = 1 + Math.sqrt(xg / 1000) * 4.5;
+    const col = `var(--${(mine ? side : 1 - side) ? "home" : "away"})`;
+    return `<circle cx="${(y + 42.5).toFixed(1)}" cy="${(100 - x).toFixed(1)}" r="${r.toFixed(2)}" fill="${res === "G" ? col : res === "S" ? col : "none"}" fill-opacity="${res === "G" ? 1 : res === "S" ? .35 : 0}" stroke="${res === "G" ? "var(--surface)" : col}" stroke-width="${res === "G" ? .6 : .5}"${res === "M" ? ' stroke-dasharray="1.2 .8"' : ""}><title>${res === "G" ? "Goal" : res === "S" ? "Shot on goal" : "Missed"} · ${(xg / 1000).toFixed(2)} xG</title></circle>`; }).join("");
+  return `<svg viewBox="-1 -1 87 77" class="ln-rink" role="img" aria-label="${mine ? "Shots taken" : "Shots allowed"} with this unit on the ice">
+    <path d="M0,75 L0,28 A28,28 0 0 1 28,0 L57,0 A28,28 0 0 1 85,28 L85,75 Z" class="rk-ice"/>
+    <line x1="0" x2="85" y1="11" y2="11" class="rk-goal"/><path d="M36.5,11 A6,6 0 0 0 48.5,11 Z" class="rk-crease"/>
+    <circle cx="20.5" cy="31" r="15" class="rk-line"/><circle cx="64.5" cy="31" r="15" class="rk-line"/>
+    <line x1="0" x2="85" y1="74.4" y2="74.4" class="rk-blue"/><rect x="39.5" y="7.6" width="6" height="3.4" rx=".8" class="rk-net"/>
+    ${pts}<path d="M0,75 L0,28 A28,28 0 0 1 28,0 L57,0 A28,28 0 0 1 85,28 L85,75 Z" class="rk-board"/></svg>`;
+}
+function lineDetail(g, l){
+  const [side, kind, ids, sec, cf, ca, xf, xa, gf, ga, D] = l;
+  if(!D) return `<div class="ln-more muted small">More detail appears once this game's data refreshes.</div>`;
+  const mmss = s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`, pct = (a, b) => a + b ? Math.round(a / (a + b) * 100) + "%" : "–";
+  const R = RATED[g.id] || [];
+  const players = ids.map(i => { const r = g.p[i], p = R.find(x => x.id === r[1]);
+    return `<button type="button" class="ln-pl" data-player="${r[1]}"><span class="av sm"><span class="face" aria-hidden="true">${initials(r[3])}${mug(r[1])}</span></span>
+      <span class="who"><b>${esc(r[3])}</b><span>${esc(r[4])} · ${r[5]} G, ${r[6]} A · ${E.fmtToi(r[12])} total</span></span>${p?.rating != null ? chip(p.rating) : ""}</button>`; }).join("");
+  const offPct = D.off[2] + D.off[3] ? D.off[2] / (D.off[2] + D.off[3]) : null, onPct = xf + xa ? xf / (xf + xa) : null;
+  const rel = onPct != null && offPct != null ? Math.round((onPct - offPct) * 100) : null;
+  const cells = [
+    [`${D.sf}–${D.sa}`, "Shots on goal", pct(D.sf, D.sa)], [`${D.hf}–${D.ha}`, "High-danger chances", pct(D.hf, D.ha)],
+    [`${cf}–${ca}`, "Shot attempts", pct(cf, ca)], [`${(xf / 1000).toFixed(2)}–${(xa / 1000).toFixed(2)}`, "Expected goals", pct(xf, xa)],
+    [`${gf}–${ga}`, "Goals", ""], [`${D.n}`, "Times on together", D.n ? `${Math.round(sec / D.n)} sec average` : ""],
+    [rel == null ? "–" : `${rel > 0 ? "+" : ""}${rel} pts`, "xG share vs team without them", offPct != null ? `Team ${Math.round(offPct * 100)}% with them off` : ""]
+  ];
+  const perLbl = ["1st", "2nd", "3rd", "OT"], per = D.per.map((v, i) => v ? `<span><b class="mono">${mmss(v)}</b><small>${perLbl[i]}</small></span>` : "").join("");
+  const goals = D.gl.length ? `<ul class="ln-goals">${D.gl.map(([t, mine, si]) => `<li><span class="mono muted">${t > 3600 ? "OT" : "P" + (Math.floor((t - 1) / 1200) + 1)} ${mmss(((t - 1) % 1200) + 1)}</span><b class="${mine ? "win" : "loss"}">${mine ? "For" : "Against"}</b> ${esc(g.p[si]?.[3] || "")}${mine ? "" : ` (${esc(g.t[1 - side].ab)})`}</li>`).join("")}</ul>` : "";
+  return `<div class="ln-more">
+    <div class="ln-pls">${players}</div>
+    <div class="ln-grid">${cells.map(([v, k, sub]) => `<div class="pstat"><b>${v}</b><span>${k}</span><small>${sub || "&nbsp;"}</small></div>`).join("")}</div>
+    <div class="ln-sub"><h4>Time together by period</h4><div class="ln-per">${per}</div></div>
+    ${goals ? `<div class="ln-sub"><h4>Goals with them on</h4>${goals}</div>` : ""}
+    <div class="ln-sub"><h4>Shots with them on the ice</h4><div class="ln-maps"><figure>${lineRink(D.sh, 1, g, side)}<figcaption>Taken by ${esc(g.t[side].ab)}</figcaption></figure><figure>${lineRink(D.sh, 0, g, side)}<figcaption>Allowed to ${esc(g.t[1 - side].ab)}</figcaption></figure></div>
+      <p class="muted small">Filled dots are shots on goal, solid dots are goals, dashed rings missed the net. Bigger means a more dangerous chance.</p></div>
+  </div>`;
+}
 function linesPanel(g){
   const ln = g.ln;
   if(!ln) return `<div class="muted">Line data isn't in this game's file yet. It appears once the game is reloaded.</div>`;
   if(!ln.length) return `<div class="muted">No line data yet. The NHL posts shift charts during and after the game.</div>`;
   const names = g.p;
   const mmss = s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
-  const unit = l => { const [, kind, ids, sec, cf, ca, xf, xa, gf, ga] = l, xs = xf + xa ? xf / (xf + xa) : null, cs = cf + ca ? cf / (cf + ca) : null;
-    const tone = xs == null ? "" : xs >= .55 ? " good" : xs <= .45 ? " bad" : "";
-    return `<div class="ln-unit"><div class="ln-who">${ids.map(i => { const r = names[i]; return `<button type="button" class="ln-p" data-player="${r[1]}"><span class="av sm"><span class="face" aria-hidden="true">${initials(r[3])}${mug(r[1])}</span></span><span>${esc(r[3])}</span></button>`; }).join("")}</div>
-      <div class="ln-nums"><span><b class="mono">${mmss(sec)}</b><small>Together</small></span><span><b class="mono">${gf}–${ga}</b><small>Goals</small></span><span><b class="mono">${cs == null ? "–" : Math.round(cs * 100) + "%"}</b><small>Shot att. ${cf}–${ca}</small></span><span class="${tone}"><b class="mono">${xs == null ? "–" : Math.round(xs * 100) + "%"}</b><small>xG ${(xf / 1000).toFixed(2)}–${(xa / 1000).toFixed(2)}</small></span></div></div>`; };
+  const unit = (l, n) => { const [, kind, ids, sec, cf, ca, xf, xa, gf, ga] = l, xs = xf + xa ? xf / (xf + xa) : null, cs = cf + ca ? cf / (cf + ca) : null;
+    const tone = xs == null ? "" : xs >= .55 ? " good" : xs <= .45 ? " bad" : "", k = lineKey(l), isOpen = openLines.has(k);
+    return `<div class="ln-unit${isOpen ? " open" : ""}"><button type="button" class="ln-head" data-line="${esc(k)}" aria-expanded="${isOpen}">
+      <span class="ln-rank">${nth(n + 1)} ${kind === "F" ? "line" : "pair"}</span>
+      <span class="ln-who">${ids.map(i => { const r = names[i]; return `<span class="ln-p"><span class="av sm"><span class="face" aria-hidden="true">${initials(r[3])}${mug(r[1])}</span></span><span>${esc(r[3])}</span></span>`; }).join("")}<span class="ln-chev" aria-hidden="true">${isOpen ? "▴" : "▾"}</span></span>
+      <span class="ln-nums"><span><b class="mono">${mmss(sec)}</b><small>Together</small></span><span><b class="mono">${gf}–${ga}</b><small>Goals</small></span><span><b class="mono">${cs == null ? "–" : Math.round(cs * 100) + "%"}</b><small>Shot att. ${cf}–${ca}</small></span><span class="${tone}"><b class="mono">${xs == null ? "–" : Math.round(xs * 100) + "%"}</b><small>xG ${(xf / 1000).toFixed(2)}–${(xa / 1000).toFixed(2)}</small></span></span></button>
+      ${isOpen ? lineDetail(g, l) : ""}</div>`; };
   return `<div class="lineups">${[0, 1].map(side => `<section class="side${side}"><div class="lineup-head"><h3>${logo(g.t[side].ab)}${esc(g.t[side].nm)}</h3></div>
-      <div class="group-label label">Forward lines</div>${ln.filter(l => l[0] === side && l[1] === "F").map(unit).join("") || `<div class="muted small">Not enough 5-on-5 time yet.</div>`}
-      <div class="group-label label">Defense pairs</div>${ln.filter(l => l[0] === side && l[1] === "D").map(unit).join("") || `<div class="muted small">Not enough 5-on-5 time yet.</div>`}
+      <div class="group-label label">Forward lines</div>${ln.filter(l => l[0] === side && l[1] === "F").map((l, n) => unit(l, n)).join("") || `<div class="muted small">Not enough 5-on-5 time yet.</div>`}
+      <div class="group-label label">Defense pairs</div>${ln.filter(l => l[0] === side && l[1] === "D").map((l, n) => unit(l, n)).join("") || `<div class="muted small">Not enough 5-on-5 time yet.</div>`}
     </section>`).join("")}</div>
-    <p class="muted small">The trios and pairs that played the most 5-on-5 time together, from the NHL's shift charts, with how play went while all of them were on the ice. Green xG share means the unit controlled the chances; red means it was outplayed.</p>`;
+    <p class="muted small">Lines are built from the NHL's shift charts: the trios and pairs that actually played together at 5-on-5, numbered 1st to 4th by how much ice time the coach gave them. Stats are for when all of them were on the ice together. Tap a line for more. Green xG share means the unit controlled the chances; red means it was outplayed.</p>`;
 }
 
 // ---------- Head-to-head (season series) with each meeting's top-rated players ----------
@@ -1542,6 +1585,7 @@ document.addEventListener("click", e => {
   const cpk = t.closest("[data-cmppick]"); if(cpk){ const [i, id] = cpk.dataset.cmppick.split(":").map(Number); CMP[i] = id; cmpQ[i] = ""; { const o = CMP[1 - i] && cmpFind(CMP[1 - i]), me = cmpFind(id); if(o && me && cmpGrp(o) !== cmpGrp(me)) CMP[1 - i] = null; } renderStats(); if(!CMP[1 - i]) document.querySelector(`[data-cmpin="${1 - i}"]`)?.focus(); return; }
   const ccl = t.closest("[data-cmpclear]"); if(ccl){ const i = +ccl.dataset.cmpclear; CMP[i] = null; renderStats(); document.querySelector(`[data-cmpin="${i}"]`)?.focus(); return; }
   const mtg = t.closest("[data-mtg]"); if(mtg){ current = +mtg.dataset.mtg; open.clear(); gameTab = "ratings"; renderStrip(); renderGame(); $("game").scrollIntoView({ block: "start", behavior: "smooth" }); return; }
+  const lnb = t.closest("[data-line]"); if(lnb){ const k = lnb.dataset.line; openLines.has(k) ? openLines.delete(k) : openLines.add(k); renderGame(); document.querySelector(`[data-line="${k}"]`)?.focus({ preventScroll: true }); return; }
   const tmp = t.closest("[data-tmap]"); if(tmp){ tmapSide = tmp.dataset.tmap; renderTeams(); return; }
   const pl = t.closest("[data-player]"); if(pl){ input.value = ""; openPlayer(+pl.dataset.player); return; }
   if(t.closest("[data-back]")){ if(history.state && history.state.view !== "scores" && history.length > 1) history.back(); else { setView("scores"); renderScores(); } return; }
