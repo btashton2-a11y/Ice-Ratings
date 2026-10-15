@@ -967,6 +967,7 @@ async function loadTeams(){
   if(teamDetail) loadTeamSched(teamDetail);
 }
 function openTeam(ab){
+  if(teamDetail !== ab) teamTab = "overview";
   teamDetail = ab;
   if(view !== "teams") setView("teams", { push:false });
   try { history.pushState({ view:"teams", team: ab }, ""); } catch(e){}
@@ -1008,6 +1009,54 @@ function renderTeams(){
     ${favs.length ? `<h2 class="tsec-h">Favorites</h2><div class="tblocks">${favs.map(block).join("")}</div><h2 class="tsec-h">All teams</h2>` : ""}
     <div class="tblocks">${T.filter(t => !isFav(t.ab)).map(block).join("")}</div>
     <p class="muted small">Tap the star on a team to add it to your favorites, which stay at the top (saved on this device). Tap a team for its full stats. Green marks a top-5 number in the NHL, red a bottom-5 one. "/gm" means per game. xG share is the team's share of expected goals (from <a href="https://moneypuck.com" target="_blank" rel="noopener">MoneyPuck.com</a>).</p>`;
+}
+// ---------- Team roster (and contracts, when a contract source is connected) ----------
+let teamTab = "overview";
+const ROSTERS = new Map();
+function loadRoster(ab){
+  if(ROSTERS.has(ab)) return;
+  ROSTERS.set(ab, { loading: true });
+  Promise.all([api(`/api/league?view=roster&ab=${ab}`), CONTRACTS ? null : fetch("./contracts.json").then(r => r.ok ? r.json() : {}).then(j => { CONTRACTS = j; }).catch(() => { CONTRACTS = {}; })])
+    .then(([j]) => ROSTERS.set(ab, j)).catch(e => ROSTERS.set(ab, { error: e.message }))
+    .finally(() => { if(view === "teams" && teamDetail === ab) renderTeams(); });
+}
+function rosterSec(t){
+  const R = ROSTERS.get(t.ab);
+  if(!R){ loadRoster(t.ab); Promise.all([loadLS(), loadADV()]).then(() => { if(view === "teams" && teamDetail === t.ab) renderTeams(); }); }
+  if(!R || R.loading) return `<section class="pv-sec"><p class="muted small">Loading the roster…</p></section>`;
+  if(R.error) return `<section class="pv-sec"><p class="muted small">${esc(R.error)}</p></section>`;
+  const C = CONTRACTS || {}, hasC = R.players.some(p => C[p.id]);
+  const now = new Date(), age = b => b ? ageOn(b) : null;
+  const sk = id => LS && !LS.error ? LS.sk.find(x => x.id === id) : null, go = id => LS && !LS.error ? LS.go.find(x => x.id === id) : null;
+  const adv = id => ADV && !ADV.error ? ADV.skaters.find(x => x.id === id) || ADV.goalies.find(x => x.id === id) : null;
+  const ages = R.players.map(p => age(p.born)).filter(x => x != null), avgAge = ages.length ? ages.reduce((a, b) => a + b, 0) / ages.length : null;
+  const capTotal = hasC ? R.players.reduce((a, p) => a + (C[p.id]?.aav || 0), 0) : 0;
+  const POS = { C: "C", L: "LW", R: "RW", D: "D", G: "G" };
+  const order = { C: 0, L: 1, R: 2 };
+  const group = (title, grp) => {
+    const list = R.players.filter(p => p.grp === grp).sort((a, b) => grp === "F" ? (order[a.pos] - order[b.pos]) || ((a.num ?? 99) - (b.num ?? 99)) : (a.num ?? 99) - (b.num ?? 99));
+    if(!list.length) return "";
+    const isG = grp === "G";
+    const head = `<tr><th class="l num">#</th><th class="l">${title} <span class="muted">${list.length}</span></th><th>Pos</th><th>Age</th><th class="hide-sm">${isG ? "Catches" : "Shoots"}</th><th class="hide-sm">Ht</th><th class="hide-sm">Wt</th><th class="hide-md l">Born</th>
+      ${isG ? `<th>GP</th><th class="hide-sm">W</th><th>SV%</th><th class="hide-sm">GAA</th>` : `<th>GP</th><th class="hide-sm">G</th><th class="hide-sm">A</th><th>P</th>`}<th>Rating</th>
+      ${hasC ? `<th class="cap">Cap hit</th><th class="cap hide-sm">Term</th><th class="cap hide-sm">Expires</th>` : ""}</tr>`;
+    const rows = list.map(p => { const s = isG ? go(p.id) : sk(p.id), a = adv(p.id), c = C[p.id];
+      const stats = isG ? `<td>${s?.gp ?? 0}</td><td class="hide-sm">${s?.w ?? "–"}</td><td>${s?.svp != null ? f3(s.svp) : "–"}</td><td class="hide-sm">${s?.gaa != null ? f2(s.gaa) : "–"}</td>`
+        : `<td>${s?.gp ?? 0}</td><td class="hide-sm">${s?.g ?? "–"}</td><td class="hide-sm">${s?.a ?? "–"}</td><td><b>${s?.p ?? "–"}</b></td>`;
+      return `<tr class="click" data-player="${p.id}" tabindex="0"><td class="l num">${p.num ?? ""}</td>
+        <td class="l"><span class="pcell"><span class="av sm"><span class="face" aria-hidden="true">${initials(p.name)}${mug(p.id)}</span></span><b>${esc(p.name)}</b></span></td>
+        <td>${POS[p.pos] || esc(p.pos)}</td><td>${age(p.born) ?? "–"}</td><td class="hide-sm">${esc(p.shoots || "–")}</td><td class="hide-sm">${p.in ? ftIn(p.in) : "–"}</td><td class="hide-sm">${p.lb ?? "–"}</td>
+        <td class="hide-md l">${esc([p.city, p.country].filter(Boolean).join(", "))}</td>${stats}<td>${a?.rating != null ? chip(a.rating) : `<span class="muted">–</span>`}</td>
+        ${hasC ? `<td class="cap">${c ? money(c.aav) : "–"}</td><td class="cap hide-sm">${c ? `${c.years} yr${c.years === 1 ? "" : "s"}` : "–"}</td><td class="cap hide-sm">${c?.through ? esc(c.through) : "–"}</td>` : ""}</tr>`; }).join("");
+    return `<div class="tbl-wrap"><table class="data roster-tbl"><thead>${head}</thead><tbody>${rows}</tbody></table></div>`;
+  };
+  const n = g => R.players.filter(p => p.grp === g).length;
+  const sum = [[R.players.length, "Players"], [n("F"), "Forwards"], [n("D"), "Defense"], [n("G"), "Goalies"], [avgAge != null ? avgAge.toFixed(1) : "–", "Average age"], ...(hasC ? [[money(capTotal), "Cap hits total"]] : [])];
+  return `<section class="pv-sec roster">
+    <div class="ros-sum">${sum.map(([v, l]) => `<div><b>${v}</b><span>${l}</span></div>`).join("")}</div>
+    ${group("Forwards", "F")}${group("Defense", "D")}${group("Goalies", "G")}
+    <p class="muted small">The NHL's current roster for the ${esc(t.name)}, with this season's stats and average Puck Rating. Tap a player for his profile.${hasC ? "" : " Contract details (cap hit, term and expiry) will show in this table once a licensed contract data source is connected. The NHL's public data doesn't include contracts."}</p>
+  </section>`;
 }
 function renderTeam(ab){
   const host = $("view-teams"), T = teamsWithAdv(), t = T.find(x => x.ab === ab);
@@ -1059,11 +1108,12 @@ function renderTeam(ab){
   <article class="card">
     <div class="team-hero">${logo(t.ab, "big")}<div class="th-main"><h1>${esc(t.name)}${favBtn(t, " inline")}</h1>
       <div class="sub">${esc(t.w)}-${esc(t.l)}-${esc(t.otl)} · ${t.pts} points · ${nth(t.divSeq)} in the ${esc(t.div)} · ${nth(t.leagueSeq)} in the NHL${t.strk ? ` · ${esc(streakTxt(t.strk))}` : ""}</div></div></div>
-    <section class="pv-sec"><h3 class="pstat-h">Team stats</h3><div class="pstat-grid">${std.map(([l,v,r]) => tile(l, v, r)).join("")}</div></section>
+    <div class="tabs team-tabs" role="tablist">${[["overview","Overview"],["roster","Roster"]].map(([k,l]) => `<button type="button" role="tab" data-ttab="${k}" aria-selected="${teamTab === k}">${l}</button>`).join("")}</div>
+    ${teamTab === "roster" ? rosterSec(t) : `<section class="pv-sec"><h3 class="pstat-h">Team stats</h3><div class="pstat-grid">${std.map(([l,v,r]) => tile(l, v, r)).join("")}</div></section>
     ${adv ? `<section class="pv-sec"><h3 class="pstat-h">Advanced</h3><div class="pstat-grid">${adv.map(([l,v,r]) => tile(l, v, r)).join("")}</div><p class="muted small">All situations, empty-net goals left out. Expected goals from <a href="https://moneypuck.com" target="_blank" rel="noopener">MoneyPuck.com</a>; shot attempt share is at 5-on-5.</p></section>` : (!ADV ? `<section class="pv-sec"><p class="muted small">Loading advanced stats…</p></section>` : "")}
     ${shotMapSec(t.ab)}
     <section class="pv-sec"><h3 class="pstat-h">Schedule</h3>${sched}</section>
-    ${players}
+    ${players}`}
   </article>`;
 }
 
@@ -1858,6 +1908,7 @@ document.addEventListener("click", e => {
   const ccl = t.closest("[data-cmpclear]"); if(ccl){ const i = +ccl.dataset.cmpclear; CMP[i] = null; renderStats(); document.querySelector(`[data-cmpin="${i}"]`)?.focus(); return; }
   const mtg = t.closest("[data-mtg]"); if(mtg){ current = +mtg.dataset.mtg; open.clear(); gameTab = "ratings"; renderStrip(); renderGame(); $("game").scrollIntoView({ block: "start", behavior: "smooth" }); return; }
   const lnb = t.closest("[data-line]"); if(lnb){ const k = lnb.dataset.line; openLines.has(k) ? openLines.delete(k) : openLines.add(k); renderGame(); document.querySelector(`[data-line="${k}"]`)?.focus({ preventScroll: true }); return; }
+  const ttb = t.closest("[data-ttab]"); if(ttb){ teamTab = ttb.dataset.ttab; renderTeams(); return; }
   const tmp = t.closest("[data-tmap]"); if(tmp){ tmapSide = tmp.dataset.tmap; renderTeams(); return; }
   const pl = t.closest("[data-player]"); if(pl){ input.value = ""; openPlayer(+pl.dataset.player); return; }
   if(t.closest("[data-back]")){ if(history.state && history.state.view !== "scores" && history.length > 1) history.back(); else { setView("scores"); renderScores(); } return; }
