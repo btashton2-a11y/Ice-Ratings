@@ -1232,19 +1232,23 @@ function goalieForm(g){
 let CMP = [null, null], cmpQ = ["", ""];
 function cmpPool(){ if(!LS || LS.error) return []; return [...LS.sk.map(p => ({ ...p, goalie:false })), ...LS.go.map(p => ({ ...p, pos:"G", goalie:true }))]; }
 function cmpFind(id){ return cmpPool().find(p => p.id === id) || null; }
+// Only players at the same position can be compared: forwards with forwards, defensemen with defensemen, goalies with goalies
+const cmpGrp = p => p.goalie ? "G" : p.pos === "D" ? "D" : "F";
+const CMP_GRP_NAME = { F:"forward", D:"defenseman", G:"goalie" }, CMP_GRP_PL = { F:"forwards", D:"defensemen", G:"goalies" };
 function cmpPicker(i){
   const p = CMP[i] ? cmpFind(CMP[i]) : null;
   if(p) return `<div class="cmp-pick chosen"><span class="av md"><span class="face" aria-hidden="true">${initials(p.name)}${mug(p.id)}</span></span>
     <span class="who"><b>${esc(p.name)}</b><span>${logo(p.team)}${esc(p.team)} · ${esc(p.pos)}</span></span><button type="button" class="link-btn" data-cmpclear="${i}">Change</button></div>`;
-  const q = cmpQ[i].trim().toLowerCase();
-  const hits = q.length >= 2 ? cmpPool().filter(x => x.name.toLowerCase().includes(q)).sort((a,b) => b.gp - a.gp).slice(0, 8) : [];
-  return `<div class="cmp-pick"><input type="search" class="cmp-in" data-cmpin="${i}" placeholder="${i ? "Second" : "First"} player" value="${esc(cmpQ[i])}" autocomplete="off" aria-label="${i ? "Second" : "First"} player">
-    ${hits.length ? `<ul class="cmp-hits">${hits.map(x => `<li><button type="button" data-cmppick="${i}:${x.id}"><span class="av sm"><span class="face" aria-hidden="true">${initials(x.name)}${mug(x.id)}</span></span><span>${esc(x.name)}</span><span class="muted">${esc(x.team)} · ${esc(x.pos)}</span></button></li>`).join("")}</ul>` : q.length >= 2 ? `<div class="muted small cmp-none">No player this season matches.</div>` : ""}</div>`;
+  const q = cmpQ[i].trim().toLowerCase(), other = CMP[1 - i] ? cmpFind(CMP[1 - i]) : null, grp = other ? cmpGrp(other) : null;
+  const hits = q.length >= 2 ? cmpPool().filter(x => x.name.toLowerCase().includes(q) && (!grp || cmpGrp(x) === grp) && x.id !== other?.id).sort((a,b) => b.gp - a.gp).slice(0, 8) : [];
+  const what = grp ? CMP_GRP_NAME[grp] : "player";
+  return `<div class="cmp-pick"><input type="search" class="cmp-in" data-cmpin="${i}" placeholder="${grp ? `Pick a ${what} to compare` : `${i ? "Second" : "First"} player`}" value="${esc(cmpQ[i])}" autocomplete="off" aria-label="${i ? "Second" : "First"} player">
+    ${hits.length ? `<ul class="cmp-hits">${hits.map(x => `<li><button type="button" data-cmppick="${i}:${x.id}"><span class="av sm"><span class="face" aria-hidden="true">${initials(x.name)}${mug(x.id)}</span></span><span>${esc(x.name)}</span><span class="muted">${esc(x.team)} · ${esc(x.pos)}</span></button></li>`).join("")}</ul>` : q.length >= 2 ? `<div class="muted small cmp-none">No ${what} this season matches.</div>` : grp ? `<div class="muted small cmp-none">Only ${CMP_GRP_PL[grp]} can be compared with ${esc(other.name)}.</div>` : ""}</div>`;
 }
 function compareBody(){
   const pa = CMP[0] && cmpFind(CMP[0]), pb = CMP[1] && cmpFind(CMP[1]);
   if(!pa || !pb) return `<p class="muted">Pick two players to see them side by side: season stats, Puck Ratings and recent form.</p>`;
-  if(pa.goalie !== pb.goalie) return `<p class="muted">Pick two skaters or two goalies. Their stats don't line up otherwise.</p>`;
+  if(cmpGrp(pa) !== cmpGrp(pb)) return `<p class="muted">Players can only be compared with others at the same position: forwards with forwards, defensemen with defensemen, goalies with goalies.</p>`;
   const advOf = id => ADV && !ADV.error ? (pa.goalie ? ADV.goalies : ADV.skaters).find(x => x.id === id) : null;
   const A = advOf(pa.id) || {}, B = advOf(pb.id) || {};
   const per = (v, gp) => gp ? v / gp : null;
@@ -1402,7 +1406,7 @@ document.addEventListener("click", e => {
   if(t.closest("[data-shareclose]") || t.id === "share-modal"){ closeShare(); return; }
   const shb = t.closest("[data-share]"); if(shb){ openShare(current, +shb.dataset.share); return; }
   const cmpb = t.closest("[data-compare]"); if(cmpb){ compareWith(+cmpb.dataset.compare); return; }
-  const cpk = t.closest("[data-cmppick]"); if(cpk){ const [i, id] = cpk.dataset.cmppick.split(":").map(Number); CMP[i] = id; cmpQ[i] = ""; renderStats(); if(!CMP[1 - i]) document.querySelector(`[data-cmpin="${1 - i}"]`)?.focus(); return; }
+  const cpk = t.closest("[data-cmppick]"); if(cpk){ const [i, id] = cpk.dataset.cmppick.split(":").map(Number); CMP[i] = id; cmpQ[i] = ""; { const o = CMP[1 - i] && cmpFind(CMP[1 - i]), me = cmpFind(id); if(o && me && cmpGrp(o) !== cmpGrp(me)) CMP[1 - i] = null; } renderStats(); if(!CMP[1 - i]) document.querySelector(`[data-cmpin="${1 - i}"]`)?.focus(); return; }
   const ccl = t.closest("[data-cmpclear]"); if(ccl){ const i = +ccl.dataset.cmpclear; CMP[i] = null; renderStats(); document.querySelector(`[data-cmpin="${i}"]`)?.focus(); return; }
   const mtg = t.closest("[data-mtg]"); if(mtg){ current = +mtg.dataset.mtg; open.clear(); gameTab = "ratings"; renderStrip(); renderGame(); $("game").scrollIntoView({ block: "start", behavior: "smooth" }); return; }
   const tmp = t.closest("[data-tmap]"); if(tmp){ tmapSide = tmp.dataset.tmap; renderTeams(); return; }
