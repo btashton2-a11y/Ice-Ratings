@@ -247,7 +247,7 @@ function renderGame(){
   const so = g.end === "SO" && fin;
   const status = fin ? (g.end === "REG" ? "FINAL" : g.end === "OT" ? "FINAL · OT" : "FINAL · SHOOTOUT")
     : `<span class="live-tag"><i aria-hidden="true"></i>LIVE · ${esc(statusText(g))}</span>`;
-  const tabs = [["ratings","Player ratings"],["stats","Team stats"],["map","Shot map"],["goals",`Goals (${g.gl.length})`]];
+  const tabs = [["ratings","Player ratings"],["stats","Team stats"],["lines","Lines"],["map","Shot map"],["goals",`Goals (${g.gl.length})`]];
   host.innerHTML = `<article class="card game">
     <div class="board">
       <div class="meta"><span>${esc(shortDay(g.d))}</span><span>${esc(g.v)}</span></div>
@@ -258,13 +258,14 @@ function renderGame(){
       </div>
       <div class="xg-line">Expected goals <b class="mono">${xg(0).toFixed(2)}</b> – <b class="mono">${xg(1).toFixed(2)}</b>
         <span class="xg-src">${g.xs === "moneypuck" ? `xG from <a href="https://moneypuck.com" target="_blank" rel="noopener">MoneyPuck.com</a>` : fin ? "Live-model xG · MoneyPuck's numbers arrive overnight" : "Live-model xG"}</span></div>
+      ${fin ? "" : wpLine(g)}
       <div class="periods"><table aria-label="Goals by period">
         <thead><tr><th></th>${perHead.map(h => `<th>${h}</th>`).join("")}${so ? "<th>SO</th>" : ""}<th>T</th><th>SOG</th></tr></thead>
         <tbody>${[0,1].map(s => `<tr><td>${esc(g.t[s].ab)}</td>${per[s].map(v => `<td>${v}</td>`).join("")}${so ? `<td>${s === win ? 1 : 0}</td>` : ""}<td class="tot">${g.t[s].sc}</td><td class="tot">${g.t[s].sog}</td></tr>`).join("")}</tbody>
       </table></div>
     </div>
     <div class="tabs" role="tablist">${tabs.map(([k,l]) => `<button type="button" role="tab" data-gtab="${k}" aria-selected="${gameTab === k}">${l}</button>`).join("")}</div>
-    <div class="panel" role="tabpanel">${gameTab === "ratings" ? ratingsPanel(g, R, fin) : gameTab === "stats" ? statsPanel(g) : gameTab === "map" ? mapPanel() : goalsPanel(g)}</div>
+    <div class="panel" role="tabpanel">${gameTab === "ratings" ? ratingsPanel(g, R, fin) : gameTab === "stats" ? statsPanel(g) : gameTab === "lines" ? linesPanel(g) : gameTab === "map" ? mapPanel() : goalsPanel(g)}</div>
   </article>`;
   if(gameTab === "map") drawMap();
 }
@@ -306,7 +307,7 @@ function previewCard(s){
   if(!P || P.loading) return `<article class="card game pv">${head}<div class="pv-sec muted">Loading the preview…</div></article>`;
   if(P.error) return `<article class="card game pv">${head}<div class="pv-sec muted">${esc(P.error)}</div></article>`;
   return `<article class="card game pv">${head}
-    ${formSec(T)}${goalieSec(T)}${teamStatsSec(T)}${hotSec(d)}${seriesSec(d, T)}
+    ${formSec(T)}${goalieSec(T)}${teamStatsSec(T)}${hotSec(d)}${h2hSec(s.t[0].ab, s.t[1].ab, s.id, () => { if(view === "scores" && current === s.id) renderGame(); })}
   </article>`;
 }
 const streakTxt = st => { const m = /^([A-Z]+)(\d+)$/.exec(st); if(!m) return st; const n = +m[2];
@@ -389,10 +390,11 @@ function statsPanel(g){
     ["Hits", sum(0,9), sum(1,9), 0], ["Blocked shots", sum(0,13), sum(1,13), 0], ["Takeaways", sum(0,15), sum(1,15), 0],
     ["Giveaways", sum(0,14), sum(1,14), 0], ["Penalty minutes", sum(0,8), sum(1,8), 0]
   ];
-  return `<div class="tstats"><div class="ts-key"><span><i style="background:var(--away)"></i>${esc(g.t[0].ab)}</span><span>${esc(g.t[1].ab)}<i style="background:var(--home)"></i></span></div>` +
+  const again = () => { if(view === "scores" && current === g.id && gameTab === "stats") renderGame(); };
+  return wpChart(g) + `<div class="tstats"><div class="ts-key"><span><i style="background:var(--away)"></i>${esc(g.t[0].ab)}</span><span>${esc(g.t[1].ab)}<i style="background:var(--home)"></i></span></div>` +
     rows.map(([n,a,b,d]) => { const tot = a + b || 1;
       return `<div class="ts-row"><span class="v${a > b ? " lead" : ""}">${a.toFixed(d)}</span><span class="nm">${n}</span><span class="v r${b > a ? " lead" : ""}">${b.toFixed(d)}</span>
-        <span class="bar" aria-hidden="true"><i class="a" style="width:${(a/tot*100).toFixed(1)}%"></i><i class="h" style="width:${(b/tot*100).toFixed(1)}%"></i></span></div>`; }).join("") + `</div>`;
+        <span class="bar" aria-hidden="true"><i class="a" style="width:${(a/tot*100).toFixed(1)}%"></i><i class="h" style="width:${(b/tot*100).toFixed(1)}%"></i></span></div>`; }).join("") + `</div>` + h2hSec(g.t[0].ab, g.t[1].ab, g.id, again);
 }
 function mapPanel(){
   return `<div class="map-top"><div class="seg" role="group" aria-label="Game situation">
@@ -751,13 +753,15 @@ function statCats(tab){
   if(tab === "ratings"){
     if(!ADV || ADV.error) return [];
     const S = ADV.skaters, G = ADV.goalies.map(g => ({ ...g, pos:"G" })), q = qualSk(S), gq = qualGo(ADV.goalies);
-    const both = [...S, ...G];
+    const both = [...S, ...G], hq = Math.max(6, q);
     const topSub = p => p.top ? `${p.top[3] ? `vs ${p.top[3]} · ` : ""}${tinyDay(p.top[1])}` : "";
     return [
       { key:"rF", title:"Forwards", chip:true, nopos:true, note:`Average Puck Rating this season. Minimum ${q} game${q === 1 ? "" : "s"}.`, list: () => rankList(S.filter(p => p.pos !== "D"), "rating", { min: p => p.rated >= q, sub: p => `${p.rated} GP` }) },
       { key:"rD", title:"Defensemen", chip:true, nopos:true, note:`Average Puck Rating this season. Minimum ${q} game${q === 1 ? "" : "s"}.`, list: () => rankList(S.filter(p => p.pos === "D"), "rating", { min: p => p.rated >= q, sub: p => `${p.rated} GP` }) },
       { key:"rG", title:"Goalies", chip:true, nopos:true, note:`Average Puck Rating this season. Minimum ${gq} game${gq === 1 ? "" : "s"}.`, list: () => rankList(G, "rating", { min: p => p.rated >= gq, sub: p => `${p.rated} GP` }) },
       { key:"rTop", title:"Best single game", chip:true, nopos:true, note:"Each player's highest game rating this season.", list: () => rankList(both.map(p => ({ ...p, topR: p.top ? p.top[0] : null })), "topR", { sub: topSub }) },
+      { key:"rHot", title:"Heating up", fmt:fSgn, nopos:true, note:`Average of the last 5 games compared with the season average. Minimum ${hq} rated games.`, list: () => rankList(both.filter(p => p.l5 != null && p.rating != null && p.rated >= hq).map(p => ({ ...p, hot: Math.round((p.l5 - p.rating) * 100) / 100 })), "hot", { min: p => p.hot > 0, sub: p => `Last 5 ${p.l5.toFixed(2)} · season ${p.rating.toFixed(2)}` }) },
+      { key:"rCold", title:"Cooling off", fmt:fSgn, nopos:true, note:`Average of the last 5 games compared with the season average. Minimum ${hq} rated games.`, list: () => rankList(both.filter(p => p.l5 != null && p.rating != null && p.rated >= hq).map(p => ({ ...p, hot: Math.round((p.l5 - p.rating) * 100) / 100 })), "hot", { asc: true, min: p => p.hot < 0, sub: p => `Last 5 ${p.l5.toFixed(2)} · season ${p.rating.toFixed(2)}` }) },
       { key:"rHi", title:"Most 8+ games", nopos:true, note:"Games rated 8.0 or better this season.", list: () => rankList(both, "hi", { min: p => p.hi > 0, sub: p => `${p.rated} GP` }) }
     ];
   }
@@ -1338,6 +1342,135 @@ function shotMapSec(ab){
         <div class="smap-key"><span><i style="background:var(--hm-more)"></i>More than league average</span><span><i style="background:var(--hm-less)"></i>Less than league average</span></div>
       </div></div>
     <p class="muted small">${tmapSide === "f" ? "Where the team's shots come from" : "Where opponents' shots come from"}, weighted by expected goals, per game, compared with the league average. The net is at the top. ${M.gp} games of shot data from <a href="https://moneypuck.com" target="_blank" rel="noopener">MoneyPuck.com</a>, updated each morning.</p></section>`;
+}
+
+// ---------- Win probability ----------
+// A simple model: goals in the time left follow a Poisson process at the league rate (about 3 per team per game),
+// split by each team's share of expected goals so far (pulled toward 50/50 early on), with a small home-ice edge.
+// Ties go to overtime (3-on-3, sudden death) and then a coin-flip shootout.
+const WP_RATE = 3.05 / 3600, WP_PRIOR = 1.2;
+const pois = (l, k) => { let p = Math.exp(-l); for(let i = 1; i <= k; i++) p *= l / i; return p; };
+function wpModel(dA, xgA, xgH, t, maxT){
+  const sA = (xgA + WP_PRIOR) / (xgA + xgH + 2 * WP_PRIOR), sH = 1 - sA;
+  if(t < 3600){
+    const rem = 3600 - t, lA = 2 * WP_RATE * sA * rem * .97, lH = 2 * WP_RATE * sH * rem * 1.03;
+    const pa = Array.from({ length: 13 }, (_, k) => pois(lA, k)), ph = Array.from({ length: 13 }, (_, k) => pois(lH, k));
+    let win = 0, tie = 0;
+    for(let i = 0; i < 13; i++) for(let j = 0; j < 13; j++){ const d = dA + i - j, p = pa[i] * ph[j]; if(d > 0) win += p; else if(d === 0) tie += p; }
+    return win + tie * (0.5 + (sA - 0.5) * 0.6);
+  }
+  if(dA) return dA > 0 ? 1 : 0;
+  if(maxT != null && t >= maxT) return 0.5;                // shootout
+  const rem = Math.max(0, 3900 - t) / 60, la = 0.2 * sA, lh = 0.2 * sH, pg = 1 - Math.exp(-(la + lh) * rem);
+  return pg * la / (la + lh) + (1 - pg) * 0.5;
+}
+const gsecOf = gl => (gl[0] - 1) * 1200 + (([m, s]) => m * 60 + s)(String(gl[1]).split(":").map(Number));
+function gameElapsed(g){
+  if(done(g.st)) return Math.max(3600, ...g.s.map(s => s[0]), ...g.gl.map(gsecOf));
+  const prd = g.prd || 1, [m, sec] = String(g.clk || "20:00").split(":").map(Number), left = (m || 0) * 60 + (sec || 0);
+  return Math.min(prd > 4 ? 3900 : prd * 1200, (prd - 1) * 1200 + (g.inter ? 1200 : Math.max(0, 1200 - left)));
+}
+// Away team's win chance at second t
+function wpAt(g, t){
+  const sc = [0, 0]; g.gl.forEach(x => { if(gsecOf(x) <= t) sc[x[2]]++; });
+  const xg = [0, 0]; g.s.forEach(s => { if(s[0] <= t && s[2] !== "B" && !/e/.test(s[9])) xg[s[1]] += s[6] / 1000; });
+  return wpModel(sc[0] - sc[1], xg[0], xg[1], t, g.prd === 5 && !done(g.st) ? t : null);
+}
+function wpNow(g){
+  if(done(g.st)){ const w = g.t[0].sc > g.t[1].sc ? 1 : 0; return w; }
+  return wpAt(g, gameElapsed(g));
+}
+function wpLine(g){
+  if(!started(g.st)) return "";
+  const a = wpNow(g), pa = Math.round(a * 100);
+  return `<div class="wp-line"><span class="wp-ab" style="color:var(--away)">${esc(g.t[0].ab)} <b class="mono">${pa}%</b></span>
+    <span class="wp-bar" aria-hidden="true"><i class="a" style="width:${pa}%"></i><i class="h" style="width:${100 - pa}%"></i></span>
+    <span class="wp-ab" style="color:var(--home)"><b class="mono">${100 - pa}%</b> ${esc(g.t[1].ab)}</span>
+    <span class="wp-lbl">${done(g.st) ? "Final" : "Win probability"}</span></div>`;
+}
+function wpChart(g){
+  const end = gameElapsed(g), maxT = Math.max(3600, end > 3600 ? 3900 : 3600);
+  const W0 = 900, H0 = 210, L = 44, R = 14, T = 12, B = 26;
+  const x = t => L + t / maxT * (W0 - L - R), y = p => T + p * (H0 - T - B);   // p = away chance: 100% at the bottom? no: away on top
+  const pts = []; for(let t = 0; t <= end; t += 20) pts.push([t, wpAt(g, t)]);
+  g.gl.forEach(gl => { const t = gsecOf(gl); pts.push([t - .1, wpAt(g, t - 1)], [t, wpAt(g, t)]); });
+  if(done(g.st)) pts.push([end, wpNow(g)]); else pts.push([end, wpAt(g, end)]);
+  pts.sort((a, b) => a[0] - b[0]);
+  // the line shows the home team's chance: up is home, down is away
+  const Y = p => y(p);  // p is away chance: 0 at top (home certain), 1 at bottom (away certain)
+  const path = pts.map(([t, p], i) => `${i ? "L" : "M"}${x(t).toFixed(1)},${Y(p).toFixed(1)}`).join("");
+  const mid = Y(.5), area = `${path}L${x(pts[pts.length - 1][0]).toFixed(1)},${mid}L${x(0)},${mid}Z`;
+  const per = [1200, 2400, 3600].filter(t => t < maxT).map(t => `<line x1="${x(t)}" x2="${x(t)}" y1="${T}" y2="${H0 - B}" class="wp-per"/>`).join("");
+  const plbl = [["1st", 600], ["2nd", 1800], ["3rd", 3000], ...(maxT > 3600 ? [["OT", 3750]] : [])].map(([l, t]) => `<text x="${x(t)}" y="${H0 - 8}" class="tr-ax" text-anchor="middle">${l}</text>`).join("");
+  const goals = g.gl.map(gl => { const t = gsecOf(gl); return `<circle cx="${x(t).toFixed(1)}" cy="${Y(wpAt(g, t)).toFixed(1)}" r="5" class="wp-goal" style="fill:var(--${gl[2] ? "home" : "away"})"><title>${esc(g.t[gl[2]].ab)} goal · ${gl[0] > 3 ? "OT" : "P" + gl[0]} ${gl[1]}</title></circle>`; }).join("");
+  return `<section class="wp-sec"><div class="trend-head"><h3 class="pstat-h">Win probability</h3>${wpLine(g)}</div>
+    <svg viewBox="0 0 ${W0} ${H0}" class="trend-svg" role="img" aria-label="Win probability through the game">
+      <clipPath id="wpTop"><rect x="0" y="0" width="${W0}" height="${mid}"/></clipPath><clipPath id="wpBot"><rect x="0" y="${mid}" width="${W0}" height="${H0}"/></clipPath>
+      <path d="${area}" clip-path="url(#wpTop)" style="fill:var(--home);opacity:.16"/><path d="${area}" clip-path="url(#wpBot)" style="fill:var(--away);opacity:.16"/>
+      ${per}<line x1="${L}" x2="${W0 - R}" y1="${mid}" y2="${mid}" class="tr-typ"/>
+      <text x="${L - 8}" y="${T + 10}" class="tr-ax" text-anchor="end">${esc(g.t[1].ab)}</text><text x="${L - 8}" y="${mid + 4}" class="tr-ax" text-anchor="end">50%</text><text x="${L - 8}" y="${H0 - B}" class="tr-ax" text-anchor="end">${esc(g.t[0].ab)}</text>
+      <path d="${path}" class="wp-path"/>${goals}${plbl}</svg>
+    <p class="muted small">How likely each team was to win at every point of the game, from the score, the time left and each team's share of expected goals so far. Dots are goals.</p></section>`;
+}
+
+// ---------- Lines (linemates) ----------
+function linesPanel(g){
+  const ln = g.ln;
+  if(!ln) return `<div class="muted">Line data isn't in this game's file yet. It appears once the game is reloaded.</div>`;
+  if(!ln.length) return `<div class="muted">No line data yet. The NHL posts shift charts during and after the game.</div>`;
+  const names = g.p;
+  const mmss = s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  const unit = l => { const [, kind, ids, sec, cf, ca, xf, xa, gf, ga] = l, xs = xf + xa ? xf / (xf + xa) : null, cs = cf + ca ? cf / (cf + ca) : null;
+    const tone = xs == null ? "" : xs >= .55 ? " good" : xs <= .45 ? " bad" : "";
+    return `<div class="ln-unit"><div class="ln-who">${ids.map(i => { const r = names[i]; return `<button type="button" class="ln-p" data-player="${r[1]}"><span class="av sm"><span class="face" aria-hidden="true">${initials(r[3])}${mug(r[1])}</span></span><span>${esc(r[3])}</span></button>`; }).join("")}</div>
+      <div class="ln-nums"><span><b class="mono">${mmss(sec)}</b><small>Together</small></span><span><b class="mono">${gf}–${ga}</b><small>Goals</small></span><span><b class="mono">${cs == null ? "–" : Math.round(cs * 100) + "%"}</b><small>Shot att. ${cf}–${ca}</small></span><span class="${tone}"><b class="mono">${xs == null ? "–" : Math.round(xs * 100) + "%"}</b><small>xG ${(xf / 1000).toFixed(2)}–${(xa / 1000).toFixed(2)}</small></span></div></div>`; };
+  return `<div class="lineups">${[0, 1].map(side => `<section class="side${side}"><div class="lineup-head"><h3>${logo(g.t[side].ab)}${esc(g.t[side].nm)}</h3></div>
+      <div class="group-label label">Forward lines</div>${ln.filter(l => l[0] === side && l[1] === "F").map(unit).join("") || `<div class="muted small">Not enough 5-on-5 time yet.</div>`}
+      <div class="group-label label">Defense pairs</div>${ln.filter(l => l[0] === side && l[1] === "D").map(unit).join("") || `<div class="muted small">Not enough 5-on-5 time yet.</div>`}
+    </section>`).join("")}</div>
+    <p class="muted small">The trios and pairs that played the most 5-on-5 time together, from the NHL's shift charts, with how play went while all of them were on the ice. Green xG share means the unit controlled the chances; red means it was outplayed.</p>`;
+}
+
+// ---------- Head-to-head (season series) with each meeting's top-rated players ----------
+const H2H = new Map(), H2H_TOP = new Map();
+function h2hKey(a, b){ return [a, b].sort().join("-"); }
+function loadH2H(a, b, after){
+  const k = h2hKey(a, b);
+  if(H2H.has(k)) return;
+  H2H.set(k, { loading: true });
+  api(`/api/league?view=h2h&ab=${a}&opp=${b}`).then(j => H2H.set(k, j)).catch(e => H2H.set(k, { error: e.message })).finally(after);
+}
+// Best-rated player on each side of a finished game (rated against the season's games, as everywhere else)
+function topOf(g){
+  if(!BASE?.cal) return null;
+  const sc = E.scoreGame(g, W), best = [null, null];
+  sc.forEach(p => { if(p.raw == null || (!p.goalie && p.toi < E.MIN_TOI_SK)) return; const r = E.calibrate(p.raw, BASE.cal[E.grpOf(p.pos)], SCALE).rating; if(!best[p.side] || r > best[p.side].rating) best[p.side] = { id: p.id, name: p.name, rating: r }; });
+  return best;
+}
+function loadTop(id, after){
+  if(H2H_TOP.has(id)) return;
+  H2H_TOP.set(id, null);
+  (GAMES.has(id) ? Promise.resolve(GAMES.get(id)) : api(`/api/game?id=${id}`)).then(g => H2H_TOP.set(id, { g, top: topOf(g) })).catch(() => H2H_TOP.set(id, { error: true })).finally(after);
+}
+function h2hSec(a, h, curId, after){
+  const k = h2hKey(a, h), S = H2H.get(k);
+  if(!S) loadH2H(a, h, after);
+  const head = `<h3>Season series</h3>`;
+  if(!S || S.loading) return `<section class="pv-sec">${head}<p class="muted small">Loading…</p></section>`;
+  if(S.error) return `<section class="pv-sec">${head}<p class="muted small">${esc(S.error)}</p></section>`;
+  const fin = S.games.filter(x => done(x.st) && x.id !== curId), up = S.games.filter(x => !started(x.st) && x.id !== curId);
+  const wins = { [a]: 0, [h]: 0 };
+  fin.forEach(x => { const w = x.as > x.hs ? x.a : x.h; wins[w] = (wins[w] || 0) + 1; });
+  const sum = !fin.length ? "First meeting this season" : wins[a] === wins[h] ? `Series tied ${wins[a]}–${wins[h]}` : `${wins[a] > wins[h] ? a : h} lead ${Math.max(wins[a], wins[h])}–${Math.min(wins[a], wins[h])}`;
+  const rows = fin.map(x => {
+    const T = H2H_TOP.get(x.id); if(T === undefined) loadTop(x.id, after);
+    const top = T?.top, wA = x.as > x.hs;
+    const pl = (p, side) => p ? `<button type="button" class="h2h-p" data-player="${p.id}" title="Top-rated ${esc(side ? x.h : x.a)} player">${logo(side ? x.h : x.a)}<span>${esc(p.name)}</span>${chip(p.rating)}</button>` : "";
+    return `<li><button type="button" class="h2h-game" data-gamelink="${x.id}" data-date="${x.d}"><span class="sd">${esc(tinyDay(x.d))}</span>
+      <span class="sr"><span class="${wA ? "w" : ""}">${esc(x.a)} ${x.as}</span> – <span class="${wA ? "" : "w"}">${x.hs} ${esc(x.h)}</span>${x.end && x.end !== "REG" ? ` <small>(${esc(x.end)})</small>` : ""}</span></button>
+      <div class="h2h-top">${T === undefined || T === null ? `<span class="muted small">Loading top players…</span>` : top ? `${pl(top[0], 0)}${pl(top[1], 1)}` : ""}</div></li>`; }).join("");
+  const next = up.length ? `<p class="muted small">Still to play: ${up.map(x => `${esc(tinyDay(x.d))} ${x.a === a || x.a === h ? `${esc(x.a)} at ${esc(x.h)}` : ""}`).join(" · ")}</p>` : "";
+  return `<section class="pv-sec">${head}<div class="h2h"><div class="h2h-sum"><b>${esc(sum)}</b></div>${fin.length ? `<ul class="h2h-list">${rows}</ul>` : ""}${next}</div></section>`;
 }
 
 async function loadGames(ids){
