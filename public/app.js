@@ -967,7 +967,7 @@ async function loadTeams(){
   if(teamDetail) loadTeamSched(teamDetail);
 }
 function openTeam(ab){
-  if(teamDetail !== ab) teamTab = "overview";
+  if(teamDetail !== ab){ teamTab = "overview"; rosterSort = null; }
   teamDetail = ab;
   if(view !== "teams") setView("teams", { push:false });
   try { history.pushState({ view:"teams", team: ab }, ""); } catch(e){}
@@ -1011,7 +1011,8 @@ function renderTeams(){
     <p class="muted small">Tap the star on a team to add it to your favorites, which stay at the top (saved on this device). Tap a team for its full stats. Green marks a top-5 number in the NHL, red a bottom-5 one. "/gm" means per game. xG share is the team's share of expected goals (from <a href="https://moneypuck.com" target="_blank" rel="noopener">MoneyPuck.com</a>).</p>`;
 }
 // ---------- Team roster (and contracts, when a contract source is connected) ----------
-let teamTab = "overview";
+let teamTab = "overview", rosterSort = null;
+const RSORT_ASC = ["num", "name", "pos", "sh", "born", "gaa", "exp"];
 const ROSTERS = new Map();
 function loadRoster(ab){
   if(ROSTERS.has(ab)) return;
@@ -1033,13 +1034,23 @@ function rosterSec(t){
   const capTotal = hasC ? R.players.reduce((a, p) => a + (C[p.id]?.aav || 0), 0) : 0;
   const POS = { C: "C", L: "LW", R: "RW", D: "D", G: "G" };
   const order = { C: 0, L: 1, R: 2 };
+  const val = (p, k, isG) => { const s = isG ? go(p.id) : sk(p.id), c = C[p.id];
+    switch(k){ case "num": return p.num; case "name": return p.name.split(" ").slice(-1)[0] + " " + p.name; case "pos": return (order[p.pos] ?? 0); case "age": return age(p.born);
+      case "sh": return p.shoots || null; case "ht": return p.in; case "wt": return p.lb; case "born": return [p.country, p.city].join(" ") || null;
+      case "gp": return s?.gp ?? 0; case "g": return s?.g; case "a": return s?.a; case "p": return s?.p; case "w": return s?.w; case "svp": return s?.svp; case "gaa": return s?.gaa;
+      case "rt": return adv(p.id)?.rating; case "cap": return c?.aav; case "term": return c?.years; case "exp": return c?.through; } };
   const group = (title, grp) => {
-    const list = R.players.filter(p => p.grp === grp).sort((a, b) => grp === "F" ? (order[a.pos] - order[b.pos]) || ((a.num ?? 99) - (b.num ?? 99)) : (a.num ?? 99) - (b.num ?? 99));
-    if(!list.length) return "";
     const isG = grp === "G";
-    const head = `<tr><th class="l num">#</th><th class="l">${title} <span class="muted">${list.length}</span></th><th>Pos</th><th>Age</th><th class="hide-sm">${isG ? "Catches" : "Shoots"}</th><th class="hide-sm">Ht</th><th class="hide-sm">Wt</th><th class="hide-md l">Born</th>
-      ${isG ? `<th>GP</th><th class="hide-sm">W</th><th>SV%</th><th class="hide-sm">GAA</th>` : `<th>GP</th><th class="hide-sm">G</th><th class="hide-sm">A</th><th>P</th>`}<th>Rating</th>
-      ${hasC ? `<th class="cap">Cap hit</th><th class="cap hide-sm">Term</th><th class="cap hide-sm">Expires</th>` : ""}</tr>`;
+    let list = R.players.filter(p => p.grp === grp).sort((a, b) => grp === "F" ? (order[a.pos] - order[b.pos]) || ((a.num ?? 99) - (b.num ?? 99)) : (a.num ?? 99) - (b.num ?? 99));
+    if(!list.length) return "";
+    const rs = rosterSort, cols = isG ? ["gp","w","svp","gaa"] : ["gp","g","a","p"];
+    if(rs && (!["g","a","p","w","svp","gaa"].includes(rs.k) || cols.includes(rs.k))) list = list.map((p, i) => [p, val(p, rs.k, isG), i]).sort((x, y) => {
+      if(x[1] == null && y[1] == null) return x[2] - y[2]; if(x[1] == null) return 1; if(y[1] == null) return -1;
+      const c = typeof x[1] === "string" ? x[1].localeCompare(y[1]) : x[1] - y[1]; return c * rs.d || x[2] - y[2]; }).map(x => x[0]);
+    const th = (k, l, cls = "") => `<th class="${cls}"><button type="button" class="sort" data-rsort="${k}" aria-pressed="${rs?.k === k}">${l}${rs?.k === k ? (rs.d > 0 ? " ↑" : " ↓") : ""}</button></th>`;
+    const head = `<tr>${th("num", "#", "l num")}<th class="l"><button type="button" class="sort" data-rsort="name" aria-pressed="${rs?.k === "name"}">${title}${rs?.k === "name" ? (rs.d > 0 ? " ↑" : " ↓") : ""}</button> <span class="muted">${list.length}</span></th>${th("pos", "Pos")}${th("age", "Age")}${th("sh", isG ? "Catches" : "Shoots", "hide-sm")}${th("ht", "Ht", "hide-sm")}${th("wt", "Wt", "hide-sm")}${th("born", "Born", "hide-md l")}
+      ${isG ? th("gp", "GP") + th("w", "W", "hide-sm") + th("svp", "SV%") + th("gaa", "GAA", "hide-sm") : th("gp", "GP") + th("g", "G", "hide-sm") + th("a", "A", "hide-sm") + th("p", "P")}${th("rt", "Rating")}
+      ${hasC ? th("cap", "Cap hit", "cap") + th("term", "Term", "cap hide-sm") + th("exp", "Expires", "cap hide-sm") : ""}</tr>`;
     const rows = list.map(p => { const s = isG ? go(p.id) : sk(p.id), a = adv(p.id), c = C[p.id];
       const stats = isG ? `<td>${s?.gp ?? 0}</td><td class="hide-sm">${s?.w ?? "–"}</td><td>${s?.svp != null ? f3(s.svp) : "–"}</td><td class="hide-sm">${s?.gaa != null ? f2(s.gaa) : "–"}</td>`
         : `<td>${s?.gp ?? 0}</td><td class="hide-sm">${s?.g ?? "–"}</td><td class="hide-sm">${s?.a ?? "–"}</td><td><b>${s?.p ?? "–"}</b></td>`;
@@ -1909,6 +1920,7 @@ document.addEventListener("click", e => {
   const mtg = t.closest("[data-mtg]"); if(mtg){ current = +mtg.dataset.mtg; open.clear(); gameTab = "ratings"; renderStrip(); renderGame(); $("game").scrollIntoView({ block: "start", behavior: "smooth" }); return; }
   const lnb = t.closest("[data-line]"); if(lnb){ const k = lnb.dataset.line; openLines.has(k) ? openLines.delete(k) : openLines.add(k); renderGame(); document.querySelector(`[data-line="${k}"]`)?.focus({ preventScroll: true }); return; }
   const ttb = t.closest("[data-ttab]"); if(ttb){ teamTab = ttb.dataset.ttab; renderTeams(); return; }
+  const rsb = t.closest("[data-rsort]"); if(rsb){ const k = rsb.dataset.rsort, d0 = RSORT_ASC.includes(k) ? 1 : -1; rosterSort = rosterSort?.k === k ? (rosterSort.d === d0 ? { k, d: -d0 } : null) : { k, d: d0 }; renderTeams(); return; }
   const tmp = t.closest("[data-tmap]"); if(tmp){ tmapSide = tmp.dataset.tmap; renderTeams(); return; }
   const pl = t.closest("[data-player]"); if(pl){ input.value = ""; openPlayer(+pl.dataset.player); return; }
   if(t.closest("[data-back]")){ if(history.state && history.state.view !== "scores" && history.length > 1) history.back(); else { setView("scores"); renderScores(); } return; }
