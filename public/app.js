@@ -1083,7 +1083,7 @@ document.addEventListener("click", e => {
   const t = e.target;
   const pl = t.closest("[data-player]"); if(pl){ input.value = ""; openPlayer(+pl.dataset.player); return; }
   if(t.closest("[data-back]")){ if(history.state && history.state.view !== "scores" && history.length > 1) history.back(); else { setView("scores"); renderScores(); } return; }
-  const nv = t.closest(".nav button"); if(nv){ setView(nv.dataset.view); if(nv.dataset.view === "scores" && SCHED) renderScores(); return; }
+  const nv = t.closest(".nav button"); if(nv){ if(nv.dataset.view === "teams") teamDetail = null; setView(nv.dataset.view); if(nv.dataset.view === "scores" && SCHED) renderScores(); return; }
   if(t.closest("#home-btn")){ if(SCHED && viewDate === SCHED.today){ setView("scores"); renderScores(); } else if(SCHED) goDay(SCHED.today); return; }
   const gc = t.closest(".gchip"); if(gc){ current = +gc.dataset.g; open.clear(); renderStrip(); renderGame(); return; }
   const wb = t.closest(".pbest-list button"); if(wb){ const gid = +wb.dataset.g, pid = +wb.dataset.p, d = wb.dataset.date; gameTab = "ratings";
