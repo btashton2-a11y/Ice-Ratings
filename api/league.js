@@ -1,4 +1,4 @@
-// GET /api/league?view=standings | leaders | stats | teams | team&ab=COL | shotmap&ab=COL
+// GET /api/league?view=standings | leaders | stats | teams | team&ab=COL | shotmap&ab=COL | h2h&ab=COL&opp=DAL
 //   standings: every team's record with division, conference, league and wild-card order
 //   leaders:   the NHL's official top 10s for skaters and goalies
 //   stats:     this season's full stat lines for every skater and goalie ("See all" lists, player Stats tabs)
@@ -95,6 +95,17 @@ async function shotmap(req, res){
   res.setHeader("Cache-Control", "public, s-maxage=1800, stale-while-revalidate=7200");
   res.status(200).json({ ab, source: "MoneyPuck.com", updated: j.updated, cols: j.cols, rows: j.rows, gp: T.gp, f: T.f, fx: T.fx, a: T.a, ax: T.ax, lg: { f: per(lg.f), fx: per(lg.fx) } });
 }
+// Head-to-head: every regular-season meeting between two teams this season
+async function h2h(req, res){
+  const ab = String(req.query.ab || "").toUpperCase(), opp = String(req.query.opp || "").toUpperCase();
+  if(!/^[A-Z]{3}$/.test(ab) || !/^[A-Z]{3}$/.test(opp)) return res.status(400).json({ error: "Pass ab=COL&opp=DAL." });
+  const j = await getJSON(`${WEB}/club-schedule-season/${ab}/now`);
+  const games = (j.games || []).filter(g => g.gameType === 2 && (g.homeTeam?.abbrev === opp || g.awayTeam?.abbrev === opp)).map(g => ({
+    id: g.id, d: g.gameDate, start: g.startTimeUTC, st: g.gameState, a: g.awayTeam?.abbrev, h: g.homeTeam?.abbrev,
+    as: g.awayTeam?.score ?? null, hs: g.homeTeam?.score ?? null, end: g.gameOutcome?.lastPeriodType || null }));
+  res.setHeader("Cache-Control", "public, s-maxage=300, stale-while-revalidate=900");
+  res.status(200).json({ ab, opp, games });
+}
 // One team's regular-season schedule and results
 async function team(req, res){
   const ab = String(req.query.ab || "").toUpperCase();
@@ -108,8 +119,8 @@ async function team(req, res){
 
 export default async function handler(req, res){
   const view = String(req.query.view || "");
-  const fn = { standings, leaders, stats, teams, team, shotmap }[view];
-  if(!fn) return res.status(400).json({ error: "Pass view=standings, leaders, stats, teams, team or shotmap." });
+  const fn = { standings, leaders, stats, teams, team, shotmap, h2h }[view];
+  if(!fn) return res.status(400).json({ error: "Pass view=standings, leaders, stats, teams, team, shotmap or h2h." });
   try { await fn(req, res); }
   catch(e){ res.status(502).json({ error: "Couldn't load this from the NHL. Try again in a minute.", detail: String(e) }); }
 }
