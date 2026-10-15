@@ -144,7 +144,7 @@ function renderBest(){
   const all = [];
   dayGames().forEach(g => (RATED[g.id] || []).forEach(p => { if(p.rating != null) all.push({ ...p, g }); }));
   $("best").hidden = !all.length;
-  document.querySelector(".scores-grid").classList.toggle("solo", !all.length);
+  sideVisibility();
   if(!all.length) return;
   all.sort((a,b) => b.rating - a.rating || b.raw - a.raw);
   const nLive = dayGames().filter(g => live(g.st)).length;
@@ -160,6 +160,46 @@ function renderBest(){
   }).join("");
   $("best-more").hidden = all.length <= 5;
   $("best-more").textContent = bestAll ? "Show top 5" : "Show top 10";
+}
+
+// ---------- Best of the week (Monday to Sunday of the week being viewed) ----------
+let WEEK = { key: null, rows: null, at: 0, days: 0, games: 0 }, weekAll = false;
+const mondayOf = d => { const x = new Date(d + "T12:00:00Z"), dow = (x.getUTCDay() + 6) % 7; return shiftDate(d, -dow); };
+function sideVisibility(){
+  const show = !$("best").hidden || !$("wbest").hidden;
+  document.querySelector(".scores-grid").classList.toggle("solo", !show);
+}
+async function loadWeek(force = false){
+  if(!viewDate || !SCHED) return;
+  const mon = mondayOf(viewDate), today = SCHED.today;
+  const stale = Date.now() - WEEK.at > 10 * 60 * 1000;
+  if(WEEK.key === mon && WEEK.rows && !force && !(stale && mon === mondayOf(today))) { renderWeekBest(); return; }
+  const key = mon; WEEK = { key, rows: WEEK.key === key ? WEEK.rows : null, at: Date.now(), days: 0, games: 0 };
+  const days = Array.from({ length: 7 }, (_, i) => shiftDate(mon, i)).filter(d => d <= today);
+  const res = await Promise.all(days.map(d => api(`/api/day-stats?date=${d}`).then(j => ({ d, j })).catch(() => null)));
+  if(WEEK.key !== key) return;   // the user moved to another week meanwhile
+  const rows = [];
+  res.forEach(r => { if(!r) return; WEEK.games += r.j.games || 0; if(r.j.games) WEEK.days++;
+    (r.j.sk || []).forEach(x => { if(x[4] != null) rows.push({ id:x[0], name:x[1], team:x[2], pos:x[3], raw:x[4], grp: E.grpOf(x[3]), d:r.d, gid:x[17], opp:x[18], line:`${x[6]}G ${x[7]}A · ${E.fmtToi(x[5])}` }); });
+    (r.j.go || []).forEach(x => { if(x[4] != null) rows.push({ id:x[0], name:x[1], team:x[2], pos:"G", raw:x[4], grp:"G", d:r.d, gid:x[13], opp:x[14], line:`${x[11]}/${x[10]} saves${x[12] === "W" ? " · W" : ""}` }); });
+  });
+  WEEK.rows = rows;
+  renderWeekBest();
+}
+function renderWeekBest(){
+  const box = $("wbest");
+  if(!WEEK.rows || !CALS || view !== "scores"){ box.hidden = true; sideVisibility(); return; }
+  const all = WEEK.rows.map(r => ({ ...r, rating: E.calibrate(r.raw, CALS[r.grp], SCALE).rating })).sort((a,b) => b.rating - a.rating || b.raw - a.raw);
+  box.hidden = !all.length; sideVisibility();
+  if(!all.length) return;
+  const mon = WEEK.key, sun = shiftDate(mon, 6), wd = d => new Date(d + "T12:00:00Z").toLocaleDateString("en-US", { weekday:"short", timeZone:"UTC" });
+  $("wbest-sub").textContent = `${tinyDay(mon)} – ${tinyDay(sun)} · ${WEEK.games} game${WEEK.games === 1 ? "" : "s"}${sun >= SCHED.today ? " so far" : ""}`;
+  $("wbest-list").innerHTML = all.slice(0, weekAll ? 10 : 5).map((p,i) => `<li><button type="button" data-g="${p.gid}" data-p="${p.id}" data-date="${p.d}">
+      <span class="rk">${i+1}</span><span class="av sm"><span class="face" aria-hidden="true">${initials(p.name)}${mug(p.id)}</span></span>
+      <span class="who"><b>${esc(p.name)}</b><span>${logo(p.team)}${esc(p.team)} vs ${esc(p.opp)} · ${wd(p.d)} · ${esc(p.line)}</span></span>
+      ${chip(p.rating)}</button></li>`).join("");
+  $("wbest-more").hidden = all.length <= 5;
+  $("wbest-more").textContent = weekAll ? "Show top 5" : "Show top 10";
 }
 
 // ---------- Scores: game detail ----------
@@ -863,7 +903,7 @@ function pickTopGame(){
   const up = (SCHED?.games || []).filter(s => !started(s.st) && s.st !== "PPD").sort((a,b) => (a.start || "").localeCompare(b.start || ""));
   return up[0]?.id ?? null;
 }
-function renderScores(){ rateAll(); renderStrip(); renderBest(); renderGame(); }
+function renderScores(){ rateAll(); renderStrip(); renderBest(); renderGame(); renderWeekBest(); }
 async function loadDay(date, { select = null } = {}){
   viewDate = date;
   SCHED = await api(`/api/schedule?date=${date}`);
@@ -874,6 +914,7 @@ async function loadDay(date, { select = null } = {}){
   await loadGames(need);
   if(!current) current = pickTopGame();
   renderScores();
+  loadWeek();
   schedulePoll();
 }
 async function refresh(){
@@ -886,7 +927,7 @@ async function refresh(){
     await loadGames(need);
     lastUpdated = new Date();
     if(!current) current = pickTopGame();
-    if(view === "scores"){ const y = window.scrollY; renderScores(); window.scrollTo(0, y); }
+    if(view === "scores"){ const y = window.scrollY; renderScores(); window.scrollTo(0, y); loadWeek(); }
   } catch(e){ $("updated").textContent = `Couldn't refresh: ${e.message}`; }
   schedulePoll();
 }
@@ -910,6 +951,11 @@ document.addEventListener("click", e => {
   const nv = t.closest(".nav button"); if(nv){ setView(nv.dataset.view); if(nv.dataset.view === "scores" && SCHED) renderScores(); return; }
   if(t.closest("#home-btn")){ if(SCHED && viewDate === SCHED.today){ setView("scores"); renderScores(); } else if(SCHED) goDay(SCHED.today); return; }
   const gc = t.closest(".gchip"); if(gc){ current = +gc.dataset.g; open.clear(); renderStrip(); renderGame(); return; }
+  const wb = t.closest("#wbest-list button"); if(wb){ const gid = +wb.dataset.g, pid = +wb.dataset.p, d = wb.dataset.date; gameTab = "ratings";
+    if(d === viewDate){ current = gid; open.clear(); open.add(pid); renderStrip(); renderGame(); scrollToRow(pid); }
+    else goDay(d, { select: gid }).then(() => { open.add(pid); renderGame(); scrollToRow(pid); });
+    return; }
+  if(t.closest("#wbest-more")){ weekAll = !weekAll; renderWeekBest(); return; }
   const bp = t.closest("#best-list button"); if(bp){ current = +bp.dataset.g; open.clear(); open.add(+bp.dataset.p); gameTab = "ratings"; renderStrip(); renderGame(); scrollToRow(+bp.dataset.p); return; }
   if(t.closest("#best-more")){ bestAll = !bestAll; renderBest(); return; }
   const gt = t.closest("[data-gtab]"); if(gt){ gameTab = gt.dataset.gtab; renderGame(); return; }
